@@ -4,13 +4,13 @@ A minimal/no-nonsense Obsidian plugin to compile multiple Markdown files into a 
 
 ## What it does
 
-Booker reads a "project" note that has YAML frontmatter describing which notes to include, then concatenates them into one output Markdown note. Everything is driven by that frontmatter. No external config files.
+Booker reads a recipe or bundle note that has YAML frontmatter describing which notes to include, then concatenates them into one output Markdown note. Everything is driven by that frontmatter. No external config files.
 
-## Example project note
+## Example recipe note
 
 ```yaml
 ---
-type: booker
+type: booker-recipe
 title: "Livro 1"
 output: "Longinus/Livro 1/Livro 1 - Compilado.md"
 order:
@@ -28,14 +28,15 @@ options:
 By default, Booker prefixes each compiled note with an H1 matching the file name.
 Set `strip_title: true` to skip adding the filename title.
 
-## Example buildfile note (mixed targets + aggregate)
+## Example bundle note (mixed targets + aggregate)
 
 ```yaml
 ---
-type: booker-build
+type: booker-bundle
 targets:
   - name: "Ato I"
-    project: "[[Ato I - Projeto]]"
+    source: "[[Ato I - Recipe]]"
+    mode: recipe
   - name: "Ato II (inline)"
     title: "Ato II — Travessia"
     output: "Longinus/Livro 1/Ato II - Compilado.md"
@@ -61,16 +62,35 @@ build_options:
 ---
 ```
 
-Targets can be inline or reference a `type: booker` project note. Aggregation concatenates successful target outputs in order, using the aggregate options.
+Targets can be inline or reference a `type: booker-recipe` or `type: booker-bundle` note using `source`. Aggregation concatenates successful target outputs in order, using the aggregate options.
+
+## Backward-compatible types
+
+Old 0.x frontmatter types still work, but show a warning Notice:
+
+- `booker` → `booker-recipe`
+- `booker-build` → `booker-bundle`
 
 ## Command
 
 Run the command in the Command Palette:
 
 ```
-Booker: Compile from YAML
-Booker: Build from buildfile
+Booker: Build current file
 ```
+
+## Source + mode
+
+Bundle targets use a single `source` field and optional `mode`:
+
+```yaml
+targets:
+  - name: "Livro 1"
+    source: "[[Livro 1]]"
+    mode: auto # auto | recipe | bundle
+```
+
+`auto` infers the type from the referenced note, while `recipe` or `bundle` forces the behavior.
 
 ## Notes on link resolution
 
