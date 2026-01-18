@@ -3,6 +3,7 @@ import { App, Notice, Plugin, TFile, normalizePath } from "obsidian";
 type BookerOptions = {
   strip_frontmatter: boolean;
   strip_h1: boolean;
+  strip_title: boolean;
   separator: string;
 };
 
@@ -17,6 +18,7 @@ type BookerFrontmatter = {
 const DEFAULT_OPTIONS: BookerOptions = {
   strip_frontmatter: true,
   strip_h1: false,
+  strip_title: false,
   separator: "\n\n---\n\n"
 };
 
@@ -58,6 +60,15 @@ function stripFirstH1(content: string): string {
     lines.splice(h1Index, 1);
   }
   return lines.join("\n");
+}
+
+function ensureFilenameTitle(content: string, filename: string): string {
+  const titleLine = `# ${filename}`;
+  const trimmed = content.trimStart();
+  if (trimmed.startsWith(`${titleLine}\n`) || trimmed === titleLine) {
+    return content;
+  }
+  return `${titleLine}\n\n${content.trimStart()}`;
 }
 
 async function ensureFolderForPath(app: App, outputPath: string): Promise<void> {
@@ -159,6 +170,9 @@ export default class BookerPlugin extends Plugin {
         continue;
       }
       let content = await this.app.vault.read(file);
+      if (!options.strip_title) {
+        content = ensureFilenameTitle(content, file.basename);
+      }
       if (options.strip_frontmatter) {
         content = stripFrontmatter(content);
       }

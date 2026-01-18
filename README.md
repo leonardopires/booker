@@ -20,9 +20,13 @@ order:
 options:
   strip_frontmatter: true
   strip_h1: false
+  strip_title: false
   separator: "\n\n---\n\n"
 ---
 ```
+
+By default, Booker prefixes each compiled note with an H1 matching the file name.
+Set `strip_title: true` to skip adding the filename title.
 
 ## Command
 
