@@ -3,7 +3,7 @@ import { BookerBundleFrontmatter, BookerRecipeFrontmatter, BundleTargetFrontmatt
 import { FrontmatterParser } from "./FrontmatterParser";
 import { LinkResolver } from "./LinkResolver";
 
-type GenerateHandler = (file: FileRef) => Promise<void>;
+type GenerateHandler = (file: FileRef) => Promise<unknown>;
 type OpenFileHandler = (path: string) => void;
 
 type InspectorTarget = {
@@ -116,12 +116,14 @@ export class BookerInspector {
     type: "booker-recipe" | "booker-bundle"
   ): string | null {
     if (type === "booker-recipe") {
-      if (!frontmatter.output) {
+      const recipeFrontmatter = frontmatter as BookerRecipeFrontmatter;
+      if (!recipeFrontmatter.output) {
         return null;
       }
-      return this.parser.resolveOutputPath(frontmatter.output, sourcePath);
+      return this.parser.resolveOutputPath(recipeFrontmatter.output, sourcePath);
     }
-    const aggregateOutput = frontmatter.aggregate?.output;
+    const bundleFrontmatter = frontmatter as BookerBundleFrontmatter;
+    const aggregateOutput = bundleFrontmatter.aggregate?.output;
     if (!aggregateOutput) {
       return null;
     }
@@ -134,7 +136,8 @@ export class BookerInspector {
     type: "booker-recipe" | "booker-bundle"
   ): { targets: InspectorTarget[]; missingCount: number } {
     if (type === "booker-recipe") {
-      const order = this.parser.normalizeOrder(frontmatter.order ?? []);
+      const recipeFrontmatter = frontmatter as BookerRecipeFrontmatter;
+      const order = this.parser.normalizeOrder(recipeFrontmatter.order ?? []);
       const targets = order.map((item) => {
         const resolved = this.resolveLink(item, sourcePath);
         return { label: this.formatLinkLabel(item), resolved };
@@ -143,8 +146,10 @@ export class BookerInspector {
       return { targets, missingCount };
     }
 
-    const targets = (frontmatter.targets ?? []).map((target, index) =>
-      this.getBundleTarget(target, index, sourcePath)
+    const bundleFrontmatter = frontmatter as BookerBundleFrontmatter;
+    const targets = (bundleFrontmatter.targets ?? []).map(
+      (target: BundleTargetFrontmatter, index: number) =>
+        this.getBundleTarget(target, index, sourcePath)
     );
     const missingCount = targets.filter((target) => !target.resolved).length;
     return { targets, missingCount };

@@ -1,24 +1,36 @@
 /* @vitest-environment jsdom */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { BookerInspector } from "../src/services/BookerInspector";
 import { FrontmatterParser } from "../src/services/FrontmatterParser";
 import { LinkResolver } from "../src/services/LinkResolver";
 import { FakeAppContext } from "./fakes/FakeAppContext";
 
+const createSpy = () => {
+  const calls: unknown[][] = [];
+  const spy = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  return { spy, calls };
+};
+
 const setupInspector = (appContext: FakeAppContext) => {
   const parser = new FrontmatterParser(appContext.metadataCache);
   const resolver = new LinkResolver(appContext.metadataCache);
-  const generate = vi.fn(async () => undefined);
-  const openFile = vi.fn();
+  const generateSpy = createSpy();
+  const openFileSpy = createSpy();
   const inspector = new BookerInspector(
     appContext.vault,
     appContext.metadataCache,
     parser,
     resolver,
-    generate,
-    openFile
+    async (file) => {
+      generateSpy.spy(file);
+    },
+    (path) => {
+      openFileSpy.spy(path);
+    }
   );
-  return { inspector, generate, openFile };
+  return { inspector, generateSpy, openFileSpy };
 };
 
 describe("BookerInspector", () => {
