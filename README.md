@@ -28,12 +28,46 @@ options:
 By default, Booker prefixes each compiled note with an H1 matching the file name.
 Set `strip_title: true` to skip adding the filename title.
 
+## Example buildfile note (mixed targets + aggregate)
+
+```yaml
+---
+type: booker-build
+targets:
+  - name: "Ato I"
+    project: "[[Ato I - Projeto]]"
+  - name: "Ato II (inline)"
+    title: "Ato II — Travessia"
+    output: "Longinus/Livro 1/Ato II - Compilado.md"
+    order:
+      - "[[L1-A2-C001]]"
+      - "[[L1-A2-C002]]"
+    options:
+      strip_frontmatter: true
+      strip_h1: true
+      separator: "\n\n---\n\n"
+aggregate:
+  title: "Longinus — Livro 1"
+  output: "Longinus/Livro 1/Livro 1 - Compilado.md"
+  options:
+    strip_frontmatter: true
+    strip_h1: false
+    separator: "\n\n"
+build_options:
+  stop_on_error: true
+  continue_on_missing: false
+  dry_run: false
+  summary_notice: true
+---
+```
+
 ## Command
 
 Run the command in the Command Palette:
 
 ```
 Booker: Compile from YAML
+Booker: Build from buildfile
 ```
 
 ## Notes on link resolution
