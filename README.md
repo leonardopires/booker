@@ -61,6 +61,8 @@ build_options:
 ---
 ```
 
+Targets can be inline or reference a `type: booker` project note. Aggregation concatenates successful target outputs in order, using the aggregate options.
+
 ## Command
 
 Run the command in the Command Palette:
@@ -75,6 +77,13 @@ Booker: Build from buildfile
 - `order` items can be full wikilinks (`[[Note]]` or `[[Folder/Note|Alias]]`) or plain link paths (`Folder/Note`).
 - Booker resolves each item using Obsidian's `metadataCache.getFirstLinkpathDest`, so renames are handled by Obsidian's metadata cache.
 - Missing files are reported in a Notice (count only) and logged to the console.
+
+## Running tests
+
+```bash
+npm run typecheck
+npm run test
+```
 
 ## License
 

@@ -5,6 +5,13 @@ export type BookerOptions = {
   separator: string;
 };
 
+export type BuildOptions = {
+  stop_on_error: boolean;
+  continue_on_missing: boolean;
+  dry_run: boolean;
+  summary_notice: boolean;
+};
+
 export type BookerProjectFrontmatter = {
   type?: string;
   title?: string;
@@ -21,12 +28,20 @@ export type BuildTargetInlineFrontmatter = {
   options?: Partial<BookerOptions>;
 };
 
+export type BuildTargetProjectOverrides = {
+  title?: string;
+  output?: string;
+  order?: string[];
+  options?: Partial<BookerOptions>;
+};
+
 export type BuildTargetProjectFrontmatter = {
   name?: string;
   project?: string;
   title?: string;
   output?: string;
   options?: Partial<BookerOptions>;
+  overrides?: BuildTargetProjectOverrides;
 };
 
 export type BuildTargetFrontmatter = BuildTargetInlineFrontmatter | BuildTargetProjectFrontmatter;
@@ -45,23 +60,14 @@ export type BookerBuildfileFrontmatter = {
   build_options?: Partial<BuildOptions>;
 };
 
-export type BuildOptions = {
-  stop_on_error: boolean;
-  continue_on_missing: boolean;
-  dry_run: boolean;
-  summary_notice: boolean;
-};
-
-export type CompileConfig = {
+export type BookerProjectConfig = {
   title?: string;
   outputPath: string;
   order: string[];
   options: BookerOptions;
 };
 
-export type BookerProjectConfig = CompileConfig;
-
-export type BuildTargetConfig = CompileConfig & {
+export type BuildTargetConfig = BookerProjectConfig & {
   name: string;
 };
 
@@ -71,15 +77,15 @@ export type BuildTargetPlan = {
   error?: string;
 };
 
-export type BuildAggregateConfig = {
+export type AggregateConfig = {
   title?: string;
   outputPath: string;
   options: BookerOptions;
 };
 
-export type BuildfileConfig = {
+export type BookerBuildfileConfig = {
   targets: BuildTargetPlan[];
-  aggregate?: BuildAggregateConfig;
+  aggregate?: AggregateConfig;
   buildOptions: BuildOptions;
 };
 
