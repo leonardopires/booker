@@ -2,10 +2,11 @@
   "name": "booker",
   "version": "1.0.0",
   "description": "A minimal/no-nonsense Obsidian plugin to compile multiple Markdown files into a single document.",
-  "main": "main.js",
+  "main": "dist/main.js",
   "scripts": {
     "build": "node esbuild.config.mjs production",
-    "dev": "node esbuild.config.mjs development"
+    "dev": "node esbuild.config.mjs development",
+    "install:vault": "node scripts/install-to-vault.mjs"
   },
   "keywords": [
     "obsidian",
