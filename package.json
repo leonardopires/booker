@@ -22,6 +22,7 @@
     "@types/node": "^20.11.25",
     "builtin-modules": "^3.3.0",
     "esbuild": "^0.20.1",
+    "jsdom": "^27.4.0",
     "obsidian": "^1.5.12",
     "tslib": "^2.6.2",
     "typescript": "^5.3.3",
