@@ -14,14 +14,10 @@ import {
 } from "../domain/types";
 import { BookerError } from "../domain/errors";
 import { FileRef, IMetadataCache } from "../ports/IAppContext";
-import { LinkResolver } from "./LinkResolver";
 import { getDirname, normalizePath } from "../utils/PathUtils";
 
 export class FrontmatterParser {
-  constructor(
-    private readonly metadataCache: IMetadataCache,
-    private readonly linkResolver: LinkResolver
-  ) {}
+  constructor(private readonly metadataCache: IMetadataCache) {}
 
   getFrontmatter(file: FileRef): Record<string, unknown> | null {
     const cache = this.metadataCache.getFileCache(file);

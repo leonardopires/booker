@@ -12,7 +12,7 @@ export default class BookerPlugin extends Plugin {
   async onload(): Promise<void> {
     const appContext = new ObsidianAppContext(this.app);
     const linkResolver = new LinkResolver(appContext.metadataCache);
-    const parser = new FrontmatterParser(appContext.metadataCache, linkResolver);
+    const parser = new FrontmatterParser(appContext.metadataCache);
     const markdownTransform = new MarkdownTransform();
     const vaultIO = new VaultIO(appContext.vault);
     const compiler = new Compiler(linkResolver, vaultIO, markdownTransform);
@@ -23,14 +23,13 @@ export default class BookerPlugin extends Plugin {
       id: "booker-build-current-file",
       name: "Booker: Build current file",
       callback: () => {
-        void this.buildCurrentFile(buildRunner, appContext, presenter);
+        void this.buildCurrentFile(buildRunner, presenter);
       }
     });
   }
 
   private async buildCurrentFile(
     buildRunner: BuildRunner,
-    appContext: ObsidianAppContext,
     presenter: UserMessagePresenter
   ): Promise<void> {
     const activeFile = this.app.workspace.getActiveFile();

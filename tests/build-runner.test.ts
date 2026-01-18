@@ -10,7 +10,7 @@ import { FakeAppContext } from "./fakes/FakeAppContext";
 
 const setupServices = (appContext: FakeAppContext) => {
   const linkResolver = new LinkResolver(appContext.metadataCache);
-  const parser = new FrontmatterParser(appContext.metadataCache, linkResolver);
+  const parser = new FrontmatterParser(appContext.metadataCache);
   const markdownTransform = new MarkdownTransform();
   const vaultIO = new VaultIO(appContext.vault);
   const compiler = new Compiler(linkResolver, vaultIO, markdownTransform);
