@@ -57,7 +57,7 @@ export class BuildRunner {
       if (typeInfo.normalized === "booker-recipe") {
         const artifact = await this.buildRecipe(file, frontmatter, undefined);
         if (artifact) {
-          this.presenter.showSuccess("Build completed successfully.");
+          this.presenter.showSuccess("Generation completed successfully.");
           return { artifactPath: artifact.artifactPath };
         }
         return {};
@@ -65,7 +65,7 @@ export class BuildRunner {
 
       const bundleOutcome = await this.buildBundle(file, callStack);
       if (bundleOutcome.artifact) {
-        this.presenter.showSuccess("Build completed successfully.");
+        this.presenter.showSuccess("Generation completed successfully.");
         return { artifactPath: bundleOutcome.artifact.artifactPath, result: bundleOutcome.result };
       }
       return { result: bundleOutcome.result };
@@ -441,7 +441,7 @@ export class BuildRunner {
           };
         case "MISSING_ORDER":
           return {
-            message: "This recipe has nothing to build.\nAdd an `order:` list with note links.",
+            message: "This recipe has no sources yet.\nAdd an `order:` list with note links.",
             severity: "error"
           };
         case "MISSING_TARGET_DEFINITION":
@@ -487,7 +487,7 @@ export class BuildRunner {
     }
     console.error("Booker: Unhandled error", error);
     return {
-      message: "Something went wrong while building.\nCheck the console for details.",
+      message: "Something went wrong while generating.\nCheck the console for details.",
       severity: "error"
     };
   }
