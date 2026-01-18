@@ -151,8 +151,13 @@ export default class BookerPlugin extends Plugin {
     }
 
     const pieces: string[] = [];
+    const outFile = this.app.vault.getAbstractFileByPath(outputPath);
 
     for (const file of resolvedFiles) {
+      if (outFile instanceof TFile && file.path === outFile.path) {
+        console.warn("Booker: Skipping output file to avoid recursion:", file.path);
+        continue;
+      }
       let content = await this.app.vault.read(file);
       if (options.strip_frontmatter) {
         content = stripFrontmatter(content);
