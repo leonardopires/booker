@@ -73,11 +73,10 @@ export class Compiler {
 
   compileFromChunks(chunks: ContentChunk[], config: BookerProjectConfig): string {
     const pieces = chunks.map((chunk) => {
-      let content = chunk.content;
+      let content = this.markdownTransform.apply(chunk.content, config.options);
       if (!config.options.strip_title) {
         content = this.ensureFilenameTitle(content, chunk.basename);
       }
-      content = this.markdownTransform.apply(content, config.options);
       return content.trim();
     });
 

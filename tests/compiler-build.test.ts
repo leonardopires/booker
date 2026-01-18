@@ -108,7 +108,7 @@ describe("Booker pipelines", () => {
     const buildfileConfig = parser.parseBuildfile({ path: "Buildfile.md", kind: "file" });
     await orchestrator.runBuildfile(buildfileConfig, "Buildfile.md");
 
-    const projectOutput = await appContext.vault.read({ path: "dist/book.md", kind: "file" });
+    const projectOutput = await appContext.vault.read({ path: "projects/dist/book.md", kind: "file" });
     const inlineOutput = await appContext.vault.read({ path: "dist/inline.md", kind: "file" });
     const aggregateOutput = await appContext.vault.read({ path: "dist/all.md", kind: "file" });
 
