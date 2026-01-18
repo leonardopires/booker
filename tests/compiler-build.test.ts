@@ -95,7 +95,7 @@ describe("Booker pipelines", () => {
           name: "Inline",
           output: "dist/inline.md",
           order: ["chapters/Three"],
-          options: { strip_h1: true }
+          options: { strip_h1: true, strip_title: true }
         }
       ],
       aggregate: {
