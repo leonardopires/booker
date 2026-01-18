@@ -86,6 +86,22 @@ async function ensureFolderForPath(app: App, outputPath: string): Promise<void> 
   }
 }
 
+function resolveOutputPath(output: string, activeFile: TFile): string {
+  const trimmed = output.trim();
+  if (trimmed.startsWith("~")) {
+    const rootPath = trimmed.slice(1);
+    const normalizedRoot = rootPath.startsWith("/") ? rootPath.slice(1) : rootPath;
+    return normalizePath(normalizedRoot);
+  }
+
+  const lastSlash = activeFile.path.lastIndexOf("/");
+  const currentDir = lastSlash === -1 ? "" : activeFile.path.slice(0, lastSlash);
+  if (!currentDir) {
+    return normalizePath(trimmed);
+  }
+  return normalizePath(`${currentDir}/${trimmed}`);
+}
+
 export default class BookerPlugin extends Plugin {
   async onload(): Promise<void> {
     this.addCommand({
@@ -127,7 +143,7 @@ export default class BookerPlugin extends Plugin {
       ...(frontmatter.options ?? {})
     };
 
-    const outputPath = normalizePath(frontmatter.output);
+    const outputPath = resolveOutputPath(frontmatter.output, activeFile);
     const resolvedFiles: TFile[] = [];
     const missing: string[] = [];
     const skippedSelf: string[] = [];
