@@ -157,7 +157,7 @@ export class FrontmatterParser {
 
         const overrides = target.overrides ?? {};
         const orderOverride = overrides.order ? this.normalizeOrder(overrides.order) : undefined;
-        if (overrides.order && orderOverride.length === 0) {
+        if (overrides.order && (!orderOverride || orderOverride.length === 0)) {
           return { name, error: `Booker: Target "${name}" overrides missing valid order entries.` };
         }
 
