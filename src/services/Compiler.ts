@@ -1,4 +1,4 @@
-import { BookerProjectConfig, CompileResult, TargetResult } from "../domain/types";
+import { BookerRecipeConfig, CompileResult, TargetResult } from "../domain/types";
 import { FileRef } from "../ports/IAppContext";
 import { getBasename, normalizePath } from "../utils/PathUtils";
 import { LinkResolver } from "./LinkResolver";
@@ -17,7 +17,7 @@ export class Compiler {
     private readonly markdownTransform: MarkdownTransform
   ) {}
 
-  async compile(config: BookerProjectConfig, contextPath: string): Promise<CompileResult> {
+  async compile(config: BookerRecipeConfig, contextPath: string): Promise<CompileResult> {
     const resolvedFiles: FileRef[] = [];
     const missingLinks: string[] = [];
     const skippedSelfIncludes: string[] = [];
@@ -49,7 +49,7 @@ export class Compiler {
   }
 
   async compileAndWrite(
-    config: BookerProjectConfig,
+    config: BookerRecipeConfig,
     contextPath: string,
     dryRun: boolean
   ): Promise<TargetResult> {
@@ -71,7 +71,7 @@ export class Compiler {
     };
   }
 
-  compileFromChunks(chunks: ContentChunk[], config: BookerProjectConfig): string {
+  compileFromChunks(chunks: ContentChunk[], config: BookerRecipeConfig): string {
     const pieces = chunks.map((chunk) => {
       let content = this.markdownTransform.apply(chunk.content, config.options);
       if (!config.options.strip_title) {
@@ -90,7 +90,7 @@ export class Compiler {
     await this.vaultIO.write(outputFile, content);
   }
 
-  private async compileFromFiles(files: FileRef[], config: BookerProjectConfig): Promise<string> {
+  private async compileFromFiles(files: FileRef[], config: BookerRecipeConfig): Promise<string> {
     const chunks: ContentChunk[] = [];
     for (const file of files) {
       const content = await this.vaultIO.read(file);

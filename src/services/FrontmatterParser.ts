@@ -1,88 +1,60 @@
 import {
-  BookerBuildfileConfig,
-  BookerBuildfileFrontmatter,
-  BookerProjectConfig,
-  BookerProjectFrontmatter,
-  BuildTargetConfig,
-  BuildTargetFrontmatter,
-  BuildTargetPlan,
+  AggregateConfig,
+  BookerBundleConfig,
+  BookerBundleFrontmatter,
+  BookerRecipeConfig,
+  BookerRecipeFrontmatter,
+  BundleTargetFrontmatter,
+  BundleTargetInlinePlan,
+  BundleTargetPlan,
+  BundleTargetSourcePlan,
   DEFAULT_BOOKER_OPTIONS,
   DEFAULT_BUILD_OPTIONS,
-  AggregateConfig
+  TargetMode
 } from "../domain/types";
 import { BookerError } from "../domain/errors";
 import { FileRef, IMetadataCache } from "../ports/IAppContext";
-import { LinkResolver } from "./LinkResolver";
 import { getDirname, normalizePath } from "../utils/PathUtils";
 
 export class FrontmatterParser {
-  constructor(
-    private readonly metadataCache: IMetadataCache,
-    private readonly linkResolver: LinkResolver
-  ) {}
+  constructor(private readonly metadataCache: IMetadataCache) {}
 
-  parseBookerProject(file: FileRef): BookerProjectConfig {
-    const frontmatter = this.getFrontmatter(file) as BookerProjectFrontmatter | null;
-    if (!frontmatter || frontmatter.type !== "booker") {
-      throw new BookerError("INVALID_FRONTMATTER", "Booker: Active file is missing frontmatter type: booker.");
-    }
-    return this.normalizeProjectConfig(frontmatter, file);
-  }
-
-  parseBuildfile(file: FileRef): BookerBuildfileConfig {
-    const frontmatter = this.getFrontmatter(file) as BookerBuildfileFrontmatter | null;
-    if (!frontmatter || frontmatter.type !== "booker-build") {
-      throw new BookerError(
-        "INVALID_FRONTMATTER",
-        "Booker: Active file is missing frontmatter type: booker-build."
-      );
-    }
-
-    if (!frontmatter.targets || !Array.isArray(frontmatter.targets) || frontmatter.targets.length === 0) {
-      throw new BookerError("MISSING_TARGETS", "Booker: Missing required frontmatter key: targets.");
-    }
-
-    const targets: BuildTargetPlan[] = frontmatter.targets.map((target, index) => {
-      if (!target || typeof target !== "object") {
-        return {
-          name: `Target ${index + 1}`,
-          error: "Booker: Target is invalid."
-        };
-      }
-      return this.parseTarget(file, target, index);
-    });
-
-    if (targets.length === 0) {
-      throw new BookerError("MISSING_TARGETS", "Booker: No valid targets found in buildfile.");
-    }
-
-    return {
-      targets,
-      aggregate: this.normalizeAggregateConfig(frontmatter.aggregate, file),
-      buildOptions: {
-        ...DEFAULT_BUILD_OPTIONS,
-        ...(frontmatter.build_options ?? {})
-      }
-    };
-  }
-
-  private getFrontmatter(file: FileRef): Record<string, unknown> | null {
+  getFrontmatter(file: FileRef): Record<string, unknown> | null {
     const cache = this.metadataCache.getFileCache(file);
     return (cache?.frontmatter ?? null) as Record<string, unknown> | null;
   }
 
-  private normalizeProjectConfig(frontmatter: BookerProjectFrontmatter, file: FileRef): BookerProjectConfig {
+  normalizeType(rawType: unknown): { normalized?: "booker-recipe" | "booker-bundle"; deprecated: boolean } {
+    if (typeof rawType !== "string") {
+      return { deprecated: false };
+    }
+    if (rawType === "booker-recipe") {
+      return { normalized: "booker-recipe", deprecated: false };
+    }
+    if (rawType === "booker-bundle") {
+      return { normalized: "booker-bundle", deprecated: false };
+    }
+    if (rawType === "booker") {
+      return { normalized: "booker-recipe", deprecated: true };
+    }
+    if (rawType === "booker-build") {
+      return { normalized: "booker-bundle", deprecated: true };
+    }
+    return { deprecated: false };
+  }
+
+  parseRecipeConfig(frontmatter: BookerRecipeFrontmatter, file: FileRef): BookerRecipeConfig {
     if (!frontmatter.output) {
-      throw new BookerError("MISSING_OUTPUT", "Booker: Missing required frontmatter key: output.");
+      throw new BookerError("MISSING_OUTPUT", "MISSING_OUTPUT");
     }
 
     if (!frontmatter.order || !Array.isArray(frontmatter.order) || frontmatter.order.length === 0) {
-      throw new BookerError("MISSING_ORDER", "Booker: Missing required frontmatter key: order.");
+      throw new BookerError("MISSING_ORDER", "MISSING_ORDER");
     }
 
     const order = this.normalizeOrder(frontmatter.order);
     if (order.length === 0) {
-      throw new BookerError("MISSING_ORDER", "Booker: Missing valid order entries.");
+      throw new BookerError("MISSING_ORDER", "MISSING_ORDER");
     }
 
     return {
@@ -96,35 +68,24 @@ export class FrontmatterParser {
     };
   }
 
-  private normalizeAggregateConfig(aggregate: BookerBuildfileFrontmatter["aggregate"], file: FileRef):
-    | AggregateConfig
-    | undefined {
-    if (!aggregate) {
-      return undefined;
+  parseBundleConfig(frontmatter: BookerBundleFrontmatter, file: FileRef): BookerBundleConfig {
+    if (!frontmatter.targets || !Array.isArray(frontmatter.targets) || frontmatter.targets.length === 0) {
+      throw new BookerError("MISSING_TARGETS", "MISSING_TARGETS");
     }
 
-    if (!aggregate.output) {
-      throw new BookerError("MISSING_AGGREGATE_OUTPUT", "Booker: Aggregate requires output.");
-    }
+    const targets = frontmatter.targets.map((target, index) => this.parseTarget(file, target, index));
 
     return {
-      title: aggregate.title,
-      outputPath: this.resolveOutputPath(aggregate.output, file.path),
-      options: {
-        ...DEFAULT_BOOKER_OPTIONS,
-        ...(aggregate.options ?? {})
+      targets,
+      aggregate: this.normalizeAggregateConfig(frontmatter.aggregate, file),
+      buildOptions: {
+        ...DEFAULT_BUILD_OPTIONS,
+        ...(frontmatter.build_options ?? {})
       }
     };
   }
 
-  private normalizeOrder(order?: string[]): string[] {
-    if (!order || !Array.isArray(order)) {
-      return [];
-    }
-    return order.filter((item): item is string => typeof item === "string");
-  }
-
-  private resolveOutputPath(output: string, activePath: string): string {
+  resolveOutputPath(output: string, activePath: string): string {
     const trimmed = output.trim();
     if (trimmed.startsWith("~")) {
       const rootPath = trimmed.slice(1);
@@ -139,75 +100,92 @@ export class FrontmatterParser {
     return normalizePath(`${dir}/${trimmed}`);
   }
 
-  private parseTarget(file: FileRef, target: BuildTargetFrontmatter, index: number): BuildTargetPlan {
-    const name = target.name?.trim() || `Target ${index + 1}`;
+  normalizeOrder(order?: string[]): string[] {
+    if (!order || !Array.isArray(order)) {
+      return [];
+    }
+    return order.filter((item): item is string => typeof item === "string");
+  }
 
-    if ("project" in target && target.project) {
-      const linkpath = this.linkResolver.normalizeLinkString(target.project);
-      const resolved = this.linkResolver.resolveToFile(linkpath, file.path);
-      if (!resolved) {
-        return {
-          name,
-          error: `Booker: Target "${name}" project not found: ${linkpath}`
-        };
-      }
-
-      try {
-        const projectConfig = this.parseBookerProject(resolved);
-
-        const overrides = target.overrides ?? {};
-        const orderOverride = overrides.order ? this.normalizeOrder(overrides.order) : undefined;
-        if (overrides.order && (!orderOverride || orderOverride.length === 0)) {
-          return { name, error: `Booker: Target "${name}" overrides missing valid order entries.` };
-        }
-
-        const outputOverride = overrides.output ?? target.output;
-        const outputPath = outputOverride
-          ? this.resolveOutputPath(outputOverride, file.path)
-          : projectConfig.outputPath;
-
-        const config: BuildTargetConfig = {
-          name,
-          title: overrides.title ?? target.title ?? projectConfig.title,
-          outputPath,
-          order: orderOverride ?? projectConfig.order,
-          options: {
-            ...projectConfig.options,
-            ...(target.options ?? {}),
-            ...(overrides.options ?? {})
-          }
-        };
-        return { name, config };
-      } catch (error) {
-        const message = error instanceof BookerError ? error.message : "Booker: Invalid project target.";
-        return { name, error: message };
-      }
+  private normalizeAggregateConfig(aggregate: BookerBundleFrontmatter["aggregate"], file: FileRef):
+    | AggregateConfig
+    | undefined {
+    if (!aggregate) {
+      return undefined;
     }
 
-    if ("output" in target && "order" in target && target.output && target.order) {
-      const order = this.normalizeOrder(target.order);
-      if (order.length === 0) {
-        return { name, error: `Booker: Target "${name}" missing valid order entries.` };
-      }
-
-      return {
-        name,
-        config: {
-          name,
-          title: target.title,
-          outputPath: this.resolveOutputPath(target.output, file.path),
-          order,
-          options: {
-            ...DEFAULT_BOOKER_OPTIONS,
-            ...(target.options ?? {})
-          }
-        }
-      };
+    if (!aggregate.output) {
+      throw new BookerError("MISSING_AGGREGATE_OUTPUT", "MISSING_AGGREGATE_OUTPUT");
     }
 
     return {
-      name,
-      error: `Booker: Target "${name}" is missing required fields.`
+      title: aggregate.title,
+      outputPath: this.resolveOutputPath(aggregate.output, file.path),
+      options: {
+        ...DEFAULT_BOOKER_OPTIONS,
+        ...(aggregate.options ?? {})
+      }
     };
+  }
+
+  private parseTarget(file: FileRef, target: BundleTargetFrontmatter, index: number): BundleTargetPlan {
+    if (!target || typeof target !== "object") {
+      throw new BookerError("MISSING_TARGET_DEFINITION", "MISSING_TARGET_DEFINITION");
+    }
+
+    const name = target.name?.trim() || `Target ${index + 1}`;
+    const source = target.source ?? target.project;
+    const mode = target.mode ?? "auto";
+
+    if (source) {
+      const plan: BundleTargetSourcePlan = {
+        name,
+        source,
+        mode: this.normalizeMode(mode),
+        overrides: target.overrides,
+        title: target.title
+      };
+      return plan;
+    }
+
+    if (target.output) {
+      if (!target.order || !Array.isArray(target.order) || target.order.length === 0) {
+        throw new BookerError("MISSING_ORDER", "MISSING_ORDER");
+      }
+
+      const order = this.normalizeOrder(target.order);
+      if (order.length === 0) {
+        throw new BookerError("MISSING_ORDER", "MISSING_ORDER");
+      }
+
+      const inlineConfig: BookerRecipeConfig = {
+        title: target.title,
+        outputPath: this.resolveOutputPath(target.output, file.path),
+        order,
+        options: {
+          ...DEFAULT_BOOKER_OPTIONS,
+          ...(target.options ?? {})
+        }
+      };
+
+      const inlinePlan: BundleTargetInlinePlan = {
+        name,
+        inlineConfig
+      };
+      return inlinePlan;
+    }
+
+    if (target.order) {
+      throw new BookerError("MISSING_OUTPUT", "MISSING_OUTPUT");
+    }
+
+    throw new BookerError("MISSING_TARGET_DEFINITION", "MISSING_TARGET_DEFINITION");
+  }
+
+  private normalizeMode(mode: string): TargetMode {
+    if (mode === "recipe" || mode === "bundle" || mode === "auto") {
+      return mode;
+    }
+    return "auto";
   }
 }
