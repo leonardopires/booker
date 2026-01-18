@@ -1,16 +1,28 @@
-import { Notice, Plugin } from "obsidian";
-import { buildFromBuildfile } from "./build";
-import { compileProject, writeCompiledOutput } from "./compiler";
-import { formatErrorForNotice } from "./errors";
-import { parseBookerProject, parseBuildfile } from "./yaml";
+import { Plugin } from "obsidian";
+import { ObsidianAppContext, createFileRef } from "./adapters/ObsidianAppContext";
+import { formatErrorForNotice } from "./domain/errors";
+import { BuildOrchestrator } from "./services/BuildOrchestrator";
+import { Compiler } from "./services/Compiler";
+import { FrontmatterParser } from "./services/FrontmatterParser";
+import { LinkResolver } from "./services/LinkResolver";
+import { MarkdownTransform } from "./services/MarkdownTransform";
+import { VaultIO } from "./services/VaultIO";
 
 export default class BookerPlugin extends Plugin {
   async onload(): Promise<void> {
+    const appContext = new ObsidianAppContext(this.app);
+    const linkResolver = new LinkResolver(appContext.metadataCache);
+    const parser = new FrontmatterParser(appContext.metadataCache, linkResolver);
+    const markdownTransform = new MarkdownTransform();
+    const vaultIO = new VaultIO(appContext.vault);
+    const compiler = new Compiler(linkResolver, vaultIO, markdownTransform);
+    const buildOrchestrator = new BuildOrchestrator(compiler, appContext.notice);
+
     this.addCommand({
       id: "booker-compile-from-yaml",
       name: "Booker: Compile from YAML",
       callback: () => {
-        void this.compileFromYaml();
+        void this.compileFromYaml(parser, compiler, appContext);
       }
     });
 
@@ -18,24 +30,29 @@ export default class BookerPlugin extends Plugin {
       id: "booker-build-from-buildfile",
       name: "Booker: Build from buildfile",
       callback: () => {
-        void this.buildFromBuildfile();
+        void this.buildFromBuildfile(parser, buildOrchestrator, appContext);
       }
     });
   }
 
-  private async compileFromYaml(): Promise<void> {
+  private async compileFromYaml(
+    parser: FrontmatterParser,
+    compiler: Compiler,
+    appContext: ObsidianAppContext
+  ): Promise<void> {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
-      new Notice("Booker: No active file.");
+      appContext.notice.notify("Booker: No active file.");
       return;
     }
 
     try {
-      const projectConfig = parseBookerProject(this.app, activeFile);
-      const compileResult = await compileProject(this.app, projectConfig, activeFile.path);
+      const fileRef = createFileRef(activeFile);
+      const projectConfig = parser.parseBookerProject(fileRef);
+      const compileResult = await compiler.compile(projectConfig, activeFile.path);
 
       if (compileResult.resolvedCount === 0) {
-        new Notice("Booker: No valid files resolved from order list.");
+        appContext.notice.notify("Booker: No valid files resolved from order list.");
         if (compileResult.missingLinks.length > 0) {
           console.warn("Booker: Missing files:", compileResult.missingLinks);
         }
@@ -45,34 +62,41 @@ export default class BookerPlugin extends Plugin {
         return;
       }
 
-      await writeCompiledOutput(this.app, projectConfig.outputPath, compileResult.content);
+      await compiler.writeOutput(projectConfig.outputPath, compileResult.content);
 
       if (compileResult.missingLinks.length > 0) {
-        new Notice(`Booker: Compiled with ${compileResult.missingLinks.length} missing file(s). See console.`);
+        appContext.notice.notify(
+          `Booker: Compiled with ${compileResult.missingLinks.length} missing file(s). See console.`
+        );
         console.warn("Booker: Missing files:", compileResult.missingLinks);
       } else if (compileResult.skippedSelfIncludes.length > 0) {
-        new Notice("Booker: Compiled (self-inclusion skipped).");
+        appContext.notice.notify("Booker: Compiled (self-inclusion skipped).");
         console.warn("Booker: Skipped self-inclusion:", compileResult.skippedSelfIncludes);
       } else {
-        new Notice(`Booker: Compiled to ${projectConfig.outputPath}`);
+        appContext.notice.notify(`Booker: Compiled to ${projectConfig.outputPath}`);
       }
     } catch (error) {
-      new Notice(formatErrorForNotice(error));
+      appContext.notice.notify(formatErrorForNotice(error));
     }
   }
 
-  private async buildFromBuildfile(): Promise<void> {
+  private async buildFromBuildfile(
+    parser: FrontmatterParser,
+    buildOrchestrator: BuildOrchestrator,
+    appContext: ObsidianAppContext
+  ): Promise<void> {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
-      new Notice("Booker: No active file.");
+      appContext.notice.notify("Booker: No active file.");
       return;
     }
 
     try {
-      const buildfileConfig = parseBuildfile(this.app, activeFile);
-      await buildFromBuildfile(this.app, buildfileConfig, activeFile.path);
+      const fileRef = createFileRef(activeFile);
+      const buildfileConfig = parser.parseBuildfile(fileRef);
+      await buildOrchestrator.runBuildfile(buildfileConfig, activeFile.path);
     } catch (error) {
-      new Notice(formatErrorForNotice(error));
+      appContext.notice.notify(formatErrorForNotice(error));
     }
   }
 }
