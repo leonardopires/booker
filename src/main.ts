@@ -70,35 +70,38 @@ export default class BookerPlugin extends Plugin {
 
   private addBookerContextMenu(
     menu: Menu,
-    file: TAbstractFile,
+    file: TAbstractFile | null,
     fileCreator: BookerFileCreator
   ): void {
-    const target = this.toFileRef(file);
-    const subMenu = new Menu();
-    let usedSubmenu = false;
-
+    const folder = this.getTargetFolder(file);
+  
     menu.addItem((item) => {
       item.setTitle("Booker");
-      const withSubmenu = item as unknown as { setSubmenu?: (menu: Menu) => void };
-      if (withSubmenu.setSubmenu) {
-        withSubmenu.setSubmenu(subMenu);
-        usedSubmenu = true;
-      }
-    });
-
-    const targetMenu = usedSubmenu ? subMenu : menu;
-    targetMenu.addItem((item) => {
-      item.setTitle("New recipe");
-      item.onClick(() => {
-        void fileCreator.createRecipe(target);
+  
+      const anyItem = item as unknown as { setSubmenu?: () => Menu; submenu?: Menu };
+      const sub = typeof anyItem.setSubmenu === "function"
+        ? anyItem.setSubmenu()
+        : (anyItem.submenu ?? null);
+  
+      const m = sub ?? menu;
+  
+      m.addItem((i) => {
+        i.setTitle("New recipe");
+        i.onClick(() => void fileCreator.createRecipe(folder));
+      });
+  
+      m.addItem((i) => {
+        i.setTitle("New bundle");
+        i.onClick(() => void fileCreator.createBundle(folder));
       });
     });
-    targetMenu.addItem((item) => {
-      item.setTitle("New bundle");
-      item.onClick(() => {
-        void fileCreator.createBundle(target);
-      });
-    });
+  }
+  
+  private getTargetFolder(file: TAbstractFile | null): TFolder {
+    if (!file) return this.app.vault.getRoot();
+    if (file instanceof TFolder) return file;
+    if (file instanceof TFile) return file.parent ?? this.app.vault.getRoot();
+    return this.app.vault.getRoot();
   }
 
   private openFile(path: string): void {

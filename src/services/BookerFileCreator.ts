@@ -1,3 +1,4 @@
+import { TFolder } from "obsidian";
 import { FileRef, IVault } from "../ports/IAppContext";
 import { getDirname, normalizePath } from "../utils/PathUtils";
 import { UserMessagePresenter } from "./UserMessagePresenter";
@@ -51,16 +52,16 @@ export class BookerFileCreator {
     private readonly openFile: OpenFileFunction
   ) {}
 
-  async createRecipe(target: FileRef): Promise<FileRef | null> {
+  async createRecipe(target: TFolder): Promise<FileRef | null> {
     return this.createFromTemplate(target, "recipe");
   }
 
-  async createBundle(target: FileRef): Promise<FileRef | null> {
+  async createBundle(target: TFolder): Promise<FileRef | null> {
     return this.createFromTemplate(target, "bundle");
   }
 
-  private async createFromTemplate(target: FileRef, kind: BookerTemplateKind): Promise<FileRef | null> {
-    const folder = target.kind === "folder" ? target.path : getDirname(target.path);
+  private async createFromTemplate(target: TFolder, kind: BookerTemplateKind): Promise<FileRef | null> {
+    const folder = target.path;
     const name = this.prompt(`New ${kind === "recipe" ? "recipe" : "bundle"} filename`);
     if (!name) {
       return null;
