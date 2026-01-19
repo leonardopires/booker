@@ -90,3 +90,30 @@ export class Notice {
     Notice.messages.push(message);
   }
 }
+
+export const parseYaml = (content: string): Record<string, unknown> => {
+  if (content.includes("INVALID_YAML")) {
+    const error = new Error("Missing ':' after key");
+    (error as { mark?: { line: number; column: number } }).mark = { line: 1, column: 4 };
+    throw error;
+  }
+  const result: Record<string, unknown> = {};
+  const lines = content.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const match = trimmed.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (!match) {
+      continue;
+    }
+    const key = match[1];
+    const value = match[2];
+    if (!key) {
+      continue;
+    }
+    result[key] = (value ?? "").replace(/^["']|["']$/g, "");
+  }
+  return result;
+};

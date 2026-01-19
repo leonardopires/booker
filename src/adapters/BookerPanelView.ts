@@ -104,7 +104,7 @@ export class BookerPanelView extends ItemView {
         event.preventDefault();
         const opened = this.openOutput(model.outputPath ?? "");
         if (!opened) {
-          this.presenter.showInfo("Output not generated yet. Generate first.");
+          this.presenter.showInfoForFile(model.fileLabel, "Output not generated yet. Generate first.");
         }
       });
     } else {

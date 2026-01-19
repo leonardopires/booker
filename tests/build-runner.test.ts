@@ -15,7 +15,7 @@ const setupServices = (appContext: FakeAppContext) => {
   const vaultIO = new VaultIO(appContext.vault);
   const compiler = new Compiler({ linkResolver, vaultIO, markdownTransform });
   const presenter = new UserMessagePresenter(appContext.notice);
-  const runner = new BuildRunner({ compiler, parser, linkResolver, presenter });
+  const runner = new BuildRunner({ compiler, parser, linkResolver, presenter, vault: appContext.vault });
   return { runner };
 };
 
@@ -179,7 +179,9 @@ describe("BuildRunner", () => {
     const { runner } = setupServices(appContext);
     await runner.buildCurrentFile({ path: "BundleA.md", kind: "file" });
 
-    expect(appContext.notice.messages.join("\n")).toContain("❌ These bundles reference each other in a loop:");
+    expect(appContext.notice.messages.join("\n")).toContain(
+      "❌ [BundleA] These bundles reference each other in a loop:"
+    );
     expect(appContext.notice.messages.join("\n")).toContain("BundleA → BundleB → BundleA");
   });
 
@@ -206,7 +208,7 @@ describe("BuildRunner", () => {
     await runner.buildCurrentFile({ path: "Recipe.md", kind: "file" });
     await runner.buildCurrentFile({ path: "Bundle.md", kind: "file" });
 
-    expect(appContext.notice.messages.some((message) => message.startsWith("⚠️"))).toBe(true);
+    expect(appContext.notice.messages.some((message) => message.startsWith("⚠️ [Recipe]"))).toBe(true);
     expect(appContext.notice.messages.join("\n")).toContain("deprecated Booker type");
   });
 
@@ -223,7 +225,7 @@ describe("BuildRunner", () => {
     const { runner } = setupServices(appContext);
     await runner.buildCurrentFile({ path: "Recipe.md", kind: "file" });
 
-    expect(appContext.notice.messages.join("\n")).toContain("❌ This recipe has no output file.");
+    expect(appContext.notice.messages.join("\n")).toContain("❌ [Recipe] This recipe has no output file.");
   });
 
   it("warns and aborts when bundles use deprecated target schemas", async () => {
@@ -248,7 +250,9 @@ describe("BuildRunner", () => {
     const { runner } = setupServices(appContext);
     await runner.buildCurrentFile({ path: "Bundle.md", kind: "file" });
 
-    expect(appContext.notice.messages.join("\n")).toContain("⚠️ This bundle uses the deprecated target schema.");
+    expect(appContext.notice.messages.join("\n")).toContain(
+      "⚠️ [Bundle] This bundle uses the deprecated target schema."
+    );
     await expect(appContext.vault.read({ path: "dist/all.md", kind: "file" })).rejects.toThrow();
   });
 });
