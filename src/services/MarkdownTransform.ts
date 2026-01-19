@@ -9,7 +9,7 @@ export const shiftHeadings = (markdown: string, offset: number): string => {
 
   const lines = markdown.split("\n");
   let inFence = false;
-  let fenceMarker: string | null = null;
+  let fenceMarker: string | undefined;
 
   const shifted = lines.map((line) => {
     const fenceMatch = line.match(/^\s*(```+|~~~+)/);
@@ -20,7 +20,7 @@ export const shiftHeadings = (markdown: string, offset: number): string => {
         fenceMarker = marker;
       } else if (fenceMarker && line.trimStart().startsWith(fenceMarker)) {
         inFence = false;
-        fenceMarker = null;
+        fenceMarker = undefined;
       }
       return line;
     }
@@ -34,9 +34,10 @@ export const shiftHeadings = (markdown: string, offset: number): string => {
       return line;
     }
 
-    const level = headingMatch[1].length;
+    const level = headingMatch[1]?.length ?? 0;
     const adjusted = Math.min(level + offset, MAX_HEADING_LEVEL);
-    return `${"#".repeat(adjusted)}${headingMatch[2]}`;
+    const headingSuffix = headingMatch[2] ?? "";
+    return `${"#".repeat(adjusted)}${headingSuffix}`;
   });
 
   return shifted.join("\n");
