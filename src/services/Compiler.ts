@@ -1,4 +1,10 @@
-import { BookerRecipeConfig, CompileResult, HeadingEntry, TargetResult } from "../domain/types";
+import {
+  BookerRecipeConfig,
+  BuildExecutionOptions,
+  CompileResult,
+  HeadingEntry,
+  TargetResult
+} from "../domain/types";
 import { FileRef } from "../ports/IAppContext";
 import { getBasename, normalizePath } from "../utils/PathUtils";
 import { LinkResolver } from "./LinkResolver";
@@ -33,9 +39,14 @@ export class Compiler {
    *
    * @param config - Recipe configuration to compile.
    * @param contextPath - Path used to resolve relative links.
+   * @param execOpts - Internal execution options (e.g., TOC emission control).
    * @returns Compilation result with content and diagnostics.
    */
-  async compile(config: BookerRecipeConfig, contextPath: string): Promise<CompileResult> {
+  async compile(
+    config: BookerRecipeConfig,
+    contextPath: string,
+    execOpts?: BuildExecutionOptions
+  ): Promise<CompileResult> {
     const resolvedFiles: FileRef[] = [];
     const missingLinks: string[] = [];
     const skippedSelfIncludes: string[] = [];
@@ -56,7 +67,7 @@ export class Compiler {
       resolvedFiles.push(resolved);
     }
 
-    const { content, headings } = await this.compileFromFiles(resolvedFiles, config);
+    const { content, headings } = await this.compileFromFiles(resolvedFiles, config, execOpts);
 
     return {
       content,
@@ -73,14 +84,16 @@ export class Compiler {
    * @param config - Recipe configuration to compile.
    * @param contextPath - Path used to resolve relative links.
    * @param dryRun - When true, skip writing output to the vault.
+   * @param execOpts - Internal execution options (e.g., TOC emission control).
    * @returns Target result containing output status and diagnostics.
    */
   async compileAndWrite(
     config: BookerRecipeConfig,
     contextPath: string,
-    dryRun: boolean
+    dryRun: boolean,
+    execOpts?: BuildExecutionOptions
   ): Promise<TargetResult> {
-    const result = await this.compile(config, contextPath);
+    const result = await this.compile(config, contextPath, execOpts);
     const success = result.resolvedCount > 0;
 
     if (success && !dryRun) {
@@ -104,12 +117,14 @@ export class Compiler {
    * @param chunks - Ordered list of content chunks.
    * @param config - Recipe configuration used for transforms.
    * @param tocHeadingsOverride - Optional headings list to use for TOC rendering.
+   * @param execOpts - Internal execution options; TOC insertion is skipped when tocEmission is "suppress".
    * @returns Combined Markdown content and extracted headings (pre-TOC insertion).
    */
   compileFromChunks(
     chunks: ContentChunk[],
     config: BookerRecipeConfig,
-    tocHeadingsOverride?: HeadingEntry[]
+    tocHeadingsOverride?: HeadingEntry[],
+    execOpts?: BuildExecutionOptions
   ): { content: string; headings: HeadingEntry[] } {
     const headings: HeadingEntry[] = [];
     const pieces = chunks.map((chunk) => {
@@ -142,12 +157,16 @@ export class Compiler {
           ...tocHeadingsOverride
         ]
       : headings;
-    const contentWithToc = this.context.tocBuilder.apply(
-      `${baseContent}\n`,
-      tocHeadings,
-      config.options,
-      !!titlePrefix
-    );
+    const effectiveTocEmission = execOpts?.tocEmission ?? "emit";
+    const contentWithToc =
+      effectiveTocEmission === "suppress"
+        ? `${baseContent}\n`
+        : this.context.tocBuilder.apply(
+            `${baseContent}\n`,
+            tocHeadings,
+            config.options,
+            !!titlePrefix
+          );
 
     return {
       content: contentWithToc,
@@ -168,14 +187,15 @@ export class Compiler {
 
   private async compileFromFiles(
     files: FileRef[],
-    config: BookerRecipeConfig
+    config: BookerRecipeConfig,
+    execOpts?: BuildExecutionOptions
   ): Promise<{ content: string; headings: HeadingEntry[] }> {
     const chunks: ContentChunk[] = [];
     for (const file of files) {
       const content = await this.context.vaultIO.read(file);
       chunks.push({ content, basename: getBasename(file.path), sourcePath: file.path });
     }
-    return this.compileFromChunks(chunks, config);
+    return this.compileFromChunks(chunks, config, undefined, execOpts);
   }
 
   private ensureFilenameTitle(content: string, filename: string): string {

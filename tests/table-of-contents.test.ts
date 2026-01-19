@@ -310,6 +310,134 @@ describe("Table of contents aggregation scope", () => {
 });
 
 describe("Table of contents integration", () => {
+  it("respects TOC emission suppression for recipes", async () => {
+    const appContext = new FakeAppContext({
+      "Recipe.md": "",
+      "chapters/One.md": "# Alpha\nBody."
+    });
+
+    appContext.metadataCache.setFrontmatter("Recipe.md", {
+      type: "booker-recipe",
+      output: "dist/recipe.md",
+      order: ["chapters/One"],
+      recipe_toc: true,
+      recipe_toc_title: "Recipe TOC",
+      recipe_strip_title: true,
+      recipe_heading_offset: 0
+    });
+
+    const runner = setupRunner(appContext);
+    await runner.buildCurrentFile({ path: "Recipe.md", kind: "file" }, [], { tocEmission: "emit" });
+    const emitted = await appContext.vault.read({ path: "dist/recipe.md", kind: "file" });
+    expect(emitted).toContain("# Recipe TOC");
+
+    await runner.buildCurrentFile({ path: "Recipe.md", kind: "file" }, [], { tocEmission: "suppress" });
+    const suppressed = await appContext.vault.read({ path: "dist/recipe.md", kind: "file" });
+    expect(suppressed).not.toContain("# Recipe TOC");
+  });
+
+  it("suppresses child TOCs when aggregate TOC is enabled", async () => {
+    const appContext = new FakeAppContext({
+      "Bundle.md": "",
+      "RecipeA.md": "",
+      "RecipeB.md": "",
+      "chapters/One.md": "# Alpha\nBody.",
+      "chapters/Two.md": "# Beta\nBody."
+    });
+
+    appContext.metadataCache.setFrontmatter("RecipeA.md", {
+      type: "booker-recipe",
+      output: "dist/recipe-a.md",
+      order: ["chapters/One"],
+      recipe_toc: true,
+      recipe_toc_title: "Recipe TOC",
+      recipe_strip_title: true,
+      recipe_heading_offset: 0
+    });
+
+    appContext.metadataCache.setFrontmatter("RecipeB.md", {
+      type: "booker-recipe",
+      output: "dist/recipe-b.md",
+      order: ["chapters/Two"],
+      recipe_toc: true,
+      recipe_toc_title: "Recipe TOC",
+      recipe_strip_title: true,
+      recipe_heading_offset: 0
+    });
+
+    appContext.metadataCache.setFrontmatter("Bundle.md", {
+      type: "booker-bundle",
+      targets: ["RecipeA", "RecipeB"],
+      aggregate_output: "dist/bundle.md",
+      aggregate_toc: true,
+      aggregate_toc_title: "Aggregate TOC",
+      aggregate_toc_scope: "tree",
+      aggregate_strip_title: true,
+      aggregate_heading_offset: 0
+    });
+
+    const runner = setupRunner(appContext);
+    await runner.buildCurrentFile({ path: "Bundle.md", kind: "file" });
+
+    const output = await appContext.vault.read({ path: "dist/bundle.md", kind: "file" });
+    const tocMatches = output.match(/# Aggregate TOC/g) ?? [];
+    expect(tocMatches).toHaveLength(1);
+    expect(output).toContain("- [[#Alpha]]");
+    expect(output).toContain("- [[#Beta]]");
+    expect(output).not.toContain("# Recipe TOC");
+  });
+
+  it("propagates TOC suppression through nested bundles", async () => {
+    const appContext = new FakeAppContext({
+      "Parent.md": "",
+      "Child.md": "",
+      "Recipe.md": "",
+      "chapters/One.md": "# Gamma\nBody."
+    });
+
+    appContext.metadataCache.setFrontmatter("Recipe.md", {
+      type: "booker-recipe",
+      output: "dist/recipe.md",
+      order: ["chapters/One"],
+      recipe_toc: true,
+      recipe_toc_title: "Recipe TOC",
+      recipe_strip_title: true,
+      recipe_heading_offset: 0
+    });
+
+    appContext.metadataCache.setFrontmatter("Child.md", {
+      type: "booker-bundle",
+      targets: ["Recipe"],
+      aggregate_output: "dist/child.md",
+      aggregate_toc: true,
+      aggregate_toc_title: "Child TOC",
+      aggregate_toc_scope: "tree",
+      aggregate_strip_title: true,
+      aggregate_heading_offset: 0
+    });
+
+    appContext.metadataCache.setFrontmatter("Parent.md", {
+      type: "booker-bundle",
+      targets: ["Child"],
+      aggregate_output: "dist/parent.md",
+      aggregate_toc: true,
+      aggregate_toc_title: "Parent TOC",
+      aggregate_toc_scope: "tree",
+      aggregate_strip_title: true,
+      aggregate_heading_offset: 0
+    });
+
+    const runner = setupRunner(appContext);
+    await runner.buildCurrentFile({ path: "Parent.md", kind: "file" });
+
+    const output = await appContext.vault.read({ path: "dist/parent.md", kind: "file" });
+    const parentTocMatches = output.match(/# Parent TOC/g) ?? [];
+    expect(parentTocMatches).toHaveLength(1);
+    expect(output).toContain("- [[#Gamma]]");
+    expect(output).not.toContain("# Child TOC");
+    expect(output).not.toContain("# Recipe TOC");
+  });
+
   it("renders a TOC with links in recipe outputs", async () => {
     const appContext = new FakeAppContext({
       "Recipe.md": "",

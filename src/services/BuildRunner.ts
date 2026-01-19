@@ -5,6 +5,7 @@ import {
   BookerBundleFrontmatter,
   BookerRecipeConfig,
   BookerRecipeFrontmatter,
+  BuildExecutionOptions,
   BuildReport,
   BuildResult,
   CompileResult,
@@ -59,9 +60,14 @@ export class BuildRunner {
    *
    * @param file - The file reference to build.
    * @param callStack - Optional call stack used to detect bundle cycles.
+   * @param execOpts - Internal execution options (e.g., TOC emission control).
    * @returns The build outcome, including any generated artifact and report.
    */
-  async buildCurrentFile(file: FileRef, callStack: string[] = []): Promise<BuildOutcome> {
+  async buildCurrentFile(
+    file: FileRef,
+    callStack: string[] = [],
+    execOpts?: BuildExecutionOptions
+  ): Promise<BuildOutcome> {
     const reporter = new BuildReporter(this.context.presenter);
     const frontmatterResult = await this.getFrontmatterWithDiagnostics(file);
     if (frontmatterResult.error) {
@@ -95,7 +101,7 @@ export class BuildRunner {
     try {
       if (typeInfo.normalized === "booker-recipe") {
         const recipeFrontmatter = frontmatter as BookerRecipeFrontmatter;
-        const artifact = await this.buildRecipe(file, recipeFrontmatter, fileLabel, reporter);
+        const artifact = await this.buildRecipe(file, recipeFrontmatter, fileLabel, reporter, execOpts);
         if (artifact) {
           reporter.success(fileLabel, "Generation completed successfully.");
           return { artifactPath: artifact.artifactPath, report: reporter.getReport() };
@@ -104,7 +110,14 @@ export class BuildRunner {
       }
 
       const bundleFrontmatter = frontmatter as BookerBundleFrontmatter;
-      const bundleOutcome = await this.buildBundle(file, callStack, reporter, fileLabel, bundleFrontmatter);
+      const bundleOutcome = await this.buildBundle(
+        file,
+        callStack,
+        reporter,
+        fileLabel,
+        bundleFrontmatter,
+        execOpts
+      );
       if (bundleOutcome.artifact) {
         return {
           artifactPath: bundleOutcome.artifact.artifactPath,
@@ -119,12 +132,18 @@ export class BuildRunner {
     }
   }
 
+  /**
+   * Build a bundle, optionally suppressing TOC emission for nested targets.
+   *
+   * When aggregate TOC is enabled, bundle targets are built with TOC emission suppressed.
+   */
   private async buildBundle(
     file: FileRef,
     callStack: string[],
     reporter: BuildReporter,
     bundleLabel: string,
-    frontmatter: BookerBundleFrontmatter
+    frontmatter: BookerBundleFrontmatter,
+    execOpts?: BuildExecutionOptions
   ): Promise<{ artifact: BuildArtifact | null; result: BuildResult }> {
     const normalizedPath = normalizePath(file.path);
     if (callStack.includes(normalizedPath)) {
@@ -150,10 +169,24 @@ export class BuildRunner {
     const outputPaths: string[] = [];
     const aggregatedHeadings: HeadingEntry[] = [];
     const summaryCounts = { success: 0, warning: 0, error: 0 };
+    const aggregateTocEnabled = bundleConfig.aggregate?.options.toc ?? false;
+    const targetExecOpts: BuildExecutionOptions | undefined =
+      execOpts?.tocEmission === "suppress"
+        ? execOpts
+        : aggregateTocEnabled
+          ? { tocEmission: "suppress" }
+          : execOpts;
 
     for (const target of bundleConfig.targets) {
       const targetStartCounts = reporter.getReport().counts;
-      const targetResult = await this.buildBundleTarget(target, file, stack, bundleConfig.buildOptions, reporter);
+      const targetResult = await this.buildBundleTarget(
+        target,
+        file,
+        stack,
+        bundleConfig.buildOptions,
+        reporter,
+        targetExecOpts
+      );
       const targetEndCounts = reporter.getReport().counts;
       const targetDelta = this.diffCounts(targetEndCounts, targetStartCounts);
       const targetStatus = this.getStatusFromCounts(targetDelta);
@@ -180,7 +213,8 @@ export class BuildRunner {
       successfulChunks,
       bundleConfig,
       bundleName,
-      aggregatedHeadings
+      aggregatedHeadings,
+      execOpts
     );
 
     const successes = results.filter((result) => result.success).length;
@@ -214,12 +248,16 @@ export class BuildRunner {
     };
   }
 
+  /**
+   * Build a single bundle target, respecting TOC emission controls from execOpts.
+   */
   private async buildBundleTarget(
     target: string,
     bundleFile: FileRef,
     callStack: string[],
     buildOptions: BookerBundleConfig["buildOptions"],
-    reporter: BuildReporter
+    reporter: BuildReporter,
+    execOpts?: BuildExecutionOptions
   ): Promise<{ result: TargetResult; artifact?: BuildArtifact }> {
     const resolved = this.resolveSourceFile(target, bundleFile.path);
     const targetName = getBasename(resolved.path);
@@ -285,7 +323,7 @@ export class BuildRunner {
           targetFrontmatter as BookerRecipeFrontmatter,
           resolved
         );
-        const compileResult = await this.context.compiler.compile(recipeConfig, resolved.path);
+        const compileResult = await this.context.compiler.compile(recipeConfig, resolved.path, execOpts);
         const targetResult = this.createTargetResult(targetName, recipeConfig.outputPath, compileResult);
         return this.handleCompileResult(
           recipeConfig,
@@ -311,7 +349,14 @@ export class BuildRunner {
     }
 
     const bundleFrontmatter = targetFrontmatter as BookerBundleFrontmatter;
-    const bundleOutcome = await this.buildBundle(resolved, callStack, reporter, targetLabel, bundleFrontmatter);
+    const bundleOutcome = await this.buildBundle(
+      resolved,
+      callStack,
+      reporter,
+      targetLabel,
+      bundleFrontmatter,
+      execOpts
+    );
     if (!bundleOutcome.artifact) {
       const targetResult: TargetResult = {
         name: targetName,
@@ -395,7 +440,8 @@ export class BuildRunner {
     successfulChunks: ContentChunk[],
     bundleConfig: BookerBundleConfig,
     bundleName: string,
-    aggregatedHeadings: HeadingEntry[]
+    aggregatedHeadings: HeadingEntry[],
+    execOpts?: BuildExecutionOptions
   ): Promise<{ outputPath: string; content: string; headings: HeadingEntry[] } | null> {
     if (!aggregate) {
       throw new BookerError("BUNDLE_MISSING_AGGREGATE_OUTPUT", bundleName);
@@ -419,7 +465,8 @@ export class BuildRunner {
         order: [],
         options: aggregate.options
       },
-      tocHeadingsOverride
+      tocHeadingsOverride,
+      execOpts
     );
 
     if (!bundleConfig.buildOptions.dry_run) {
@@ -437,14 +484,18 @@ export class BuildRunner {
     };
   }
 
+  /**
+   * Build a recipe, optionally suppressing TOC emission via execOpts.
+   */
   private async buildRecipe(
     file: FileRef,
     frontmatter: BookerRecipeFrontmatter,
     fileLabel: string,
-    reporter: BuildReporter
+    reporter: BuildReporter,
+    execOpts?: BuildExecutionOptions
   ): Promise<BuildArtifact | null> {
     const config = this.context.parser.parseRecipeConfig(frontmatter, file);
-    const result = await this.context.compiler.compile(config, file.path);
+    const result = await this.context.compiler.compile(config, file.path, execOpts);
     if (result.skippedSelfIncludes.length > 0) {
       console.warn(`Booker: Skipped self-inclusion for ${file.path}:`, result.skippedSelfIncludes);
       reporter.warning(
