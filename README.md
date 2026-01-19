@@ -22,6 +22,7 @@ Booker lets you:
 - Generate **one clean output file** (or many)
 - Build **hierarchies** (chapters → acts → books → trilogies)
 - Control headings, separators, tables of contents, and build behavior
+- Rely on **wikilink‑based ordering**, so note renames stay in sync
 
 You never leave Obsidian.
 You never leave Markdown.
@@ -85,6 +86,9 @@ Now run:
 **Command Palette → Booker: Generate current file**
 
 You’ll get `Act I.md` with all scenes merged.
+
+**Output path note:** If `output` (or `aggregate_output`) starts with `~`, Booker treats it as **vault‑relative**.  
+Example: `~/output/Act I.md` writes to `<vault>/output/Act I.md`.
 
 ---
 
