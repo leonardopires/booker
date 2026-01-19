@@ -48,9 +48,37 @@ export default class BookerPlugin extends Plugin {
         this.addBookerContextMenu(menu, file, fileCreator);
       })
     );
+    presenter.showInfo("Registering markdown processor 1");
 
     this.registerMarkdownPostProcessor((el, ctx) => {
-      inspector.render(el, ctx.sourcePath);
+      presenter.showInfo("Registering markdown processor 2");
+      const sourcePath = ctx.sourcePath || this.app.workspace.getActiveFile()?.path;
+      if (!sourcePath) {
+        presenter.showWarning("Booker: unable to retrieve current source path.");
+        return;
+      }
+      try {
+
+        const viewRoot =
+          el.closest(".markdown-source-view") ??
+          el.closest(".markdown-reading-view") ??
+          el.closest(".markdown-preview-view");
+      
+        // Reading view container (preview)
+        const previewHost = viewRoot?.querySelector(".markdown-preview-sizer");
+      
+        // Live preview container (CM6)
+        const liveHost = viewRoot?.querySelector(".cm-content");
+      
+        const host = (previewHost ?? liveHost) as HTMLElement | null;
+        if (!host) {
+          presenter.showError("Booker: Host not found");
+          return;
+        }
+        inspector.render(host, sourcePath);
+      } catch (e: any) {
+        presenter.showError(e.toString());
+      }
     });
   }
 

@@ -26,6 +26,7 @@ export class BookerInspector {
 
     const file = this.vault.getFileByPath(sourcePath);
     if (!file || file.kind !== "file") {
+      throw new Error(`File not found or is not a file: ${sourcePath}`);
       return;
     }
 

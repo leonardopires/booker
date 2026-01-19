@@ -17,7 +17,7 @@ order:
 options:
   strip_frontmatter: true
   strip_h1: false
-  separator: "\n\n---\n\n"
+  separator: "\\n\\n---\\n\\n"
 ---
 
 # New Recipe
@@ -62,11 +62,8 @@ export class BookerFileCreator {
 
   private async createFromTemplate(target: TFolder, kind: BookerTemplateKind): Promise<FileRef | null> {
     const folder = target.path;
-    const name = this.prompt(`New ${kind === "recipe" ? "recipe" : "bundle"} filename`);
-    if (!name) {
-      return null;
-    }
-
+    const name = (`New ${kind === "recipe" ? "recipe" : "bundle"}`);
+    
     const trimmed = name.trim();
     if (!trimmed) {
       this.presenter.showWarning("Please enter a filename.");
