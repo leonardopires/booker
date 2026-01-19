@@ -1,4 +1,4 @@
-import { Menu, Plugin, TAbstractFile, TFile, TFolder } from "obsidian";
+import { Menu, Plugin, TAbstractFile, TFile, TFolder, addIcon } from "obsidian";
 import { BookerPanelView, VIEW_TYPE_BOOKER_PANEL } from "./adapters/BookerPanelView";
 import { FilenameModal } from "./adapters/FilenameModal";
 import { ObsidianAppContext, createFileRef } from "./adapters/ObsidianAppContext";
@@ -11,6 +11,23 @@ import { LinkResolver } from "./services/LinkResolver";
 import { MarkdownTransform } from "./services/MarkdownTransform";
 import { UserMessagePresenter } from "./services/UserMessagePresenter";
 import { VaultIO } from "./services/VaultIO";
+
+const BOOKER_ICON_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 24 24"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+  <path d="M12 2 2 7l10 5 10-5-10-5z"/>
+  <path d="M2 17l10 5 10-5"/>
+  <path d="M2 12l10 5 10-5"/>
+</svg>
+`;
+
+const BOOKER_ICON_ID = "lp-booker";
+
 
 export default class BookerPlugin extends Plugin {
   async onload(): Promise<void> {
@@ -80,6 +97,16 @@ export default class BookerPlugin extends Plugin {
       this.app.workspace.on("active-leaf-change", () => {
         this.refreshPanelViews();
       })
+    );
+
+    addIcon(BOOKER_ICON_ID, BOOKER_ICON_SVG);
+
+    this.addRibbonIcon(
+      BOOKER_ICON_ID, // lucide icon name
+      "Toggle Booker panel",
+      () => {
+        void this.togglePanel();
+      }
     );
   }
 
