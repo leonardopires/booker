@@ -219,6 +219,7 @@ aggregate_toc_include_h1: boolean
 
 build_stop_on_error: boolean
 build_continue_on_missing: boolean
+build_dry_run: boolean
 build_summary_notice: boolean
 ```
 

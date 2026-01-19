@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "minAppVersion": "1.0.0",
   "description": "A minimal/no-nonsense Obsidian plugin to compile multiple Markdown files into a single document.",
-  "author": "Booker",
-  "authorUrl": "https://example.com",
+  "author": "Leonardo Pires",
+  "authorUrl": "https://github.com/leonardopires/booker",
   "isDesktopOnly": false
 }
