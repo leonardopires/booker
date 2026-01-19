@@ -52,7 +52,8 @@ const createSpy = () => {
 
 describe("BookerContext", () => {
   it("builds core services and uses the modal prompt for new files", async () => {
-    Modal.lastInstance = null;
+    const modalType = Modal as typeof Modal & { lastInstance: Modal | null };
+    modalType.lastInstance = null;
     const vault = new TestVault();
     const metadataCache = {
       getFileCache: () => null,
@@ -76,7 +77,7 @@ describe("BookerContext", () => {
     expect(context.panelModelBuilder).toBeDefined();
 
     const createPromise = context.fileCreator.createRecipe({ path: "Notes", kind: "folder" });
-    const modal = Modal.lastInstance;
+    const modal = modalType.lastInstance;
     expect(modal).not.toBeNull();
     if (modal) {
       const input = modal.contentEl.querySelector<HTMLInputElement>("input");
@@ -85,7 +86,8 @@ describe("BookerContext", () => {
         input.value = "ContextRecipe";
       }
       const buttons = Array.from(modal.contentEl.querySelectorAll<HTMLButtonElement>("button"));
-      buttons[1]?.click();
+      const submit = buttons[1];
+      submit?.click();
     }
 
     await createPromise;
