@@ -11,7 +11,7 @@ export const VIEW_TYPE_BOOKER_PANEL = "booker-panel";
 /**
  * Generates Booker output for the active file.
  */
-type GenerateHandler = (file: FileRef) => Promise<void>;
+type GenerateHandler = (file: FileRef) => Promise<unknown>;
 
 /**
  * Attempts to open the generated output path.
@@ -93,15 +93,16 @@ export class BookerPanelView extends ItemView {
       return;
     }
 
+    const model = this.model;
     const outputLine = this.createElement(root, "div", "booker-panel__output");
     outputLine.append("Output: ");
-    if (this.model.outputPath) {
+    if (model.outputPath) {
       const link = this.createElement(outputLine, "a", "booker-panel__output-link");
       link.href = "#";
-      link.textContent = this.model.outputPath;
+      link.textContent = model.outputPath;
       link.addEventListener("click", (event) => {
         event.preventDefault();
-        const opened = this.openOutput(this.model.outputPath ?? "");
+        const opened = this.openOutput(model.outputPath ?? "");
         if (!opened) {
           this.presenter.showInfo("Output not generated yet. Generate first.");
         }
@@ -111,10 +112,10 @@ export class BookerPanelView extends ItemView {
     }
 
     const summary = this.createElement(root, "div", "booker-panel__summary");
-    summary.textContent = `${this.model.summaryLabel}: ${this.model.totalCount} (missing: ${this.model.missingCount})`;
+    summary.textContent = `${model.summaryLabel}: ${model.totalCount} (missing: ${model.missingCount})`;
 
     const list = this.createElement(root, "ul", "booker-panel__list");
-    this.model.items.forEach((item) => {
+    model.items.forEach((item) => {
       const entry = this.createElement(list, "li", "booker-panel__list-item");
       const icon = item.resolved ? "✅" : "❌";
       entry.textContent = `${icon} ${item.label}`;
@@ -123,7 +124,7 @@ export class BookerPanelView extends ItemView {
     const actions = this.createElement(root, "div", "booker-panel__actions");
     const button = this.createElement(actions, "button", "booker-panel__action-button");
     button.type = "button";
-    button.textContent = this.model.actionLabel;
+    button.textContent = model.actionLabel;
     button.addEventListener("click", () => {
       if (this.activeFile) {
         void this.generate(this.activeFile);
@@ -131,7 +132,7 @@ export class BookerPanelView extends ItemView {
     });
 
     const hint = this.createElement(root, "div", "booker-panel__hint");
-    hint.textContent = this.model.hint;
+    hint.textContent = model.hint;
   }
 
   /**

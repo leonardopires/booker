@@ -157,8 +157,9 @@ export default class BookerPlugin extends Plugin {
    */
   private async togglePanel(): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_BOOKER_PANEL);
-    if (existing.length > 0) {
-      this.app.workspace.revealLeaf(existing[0]);
+    const [openLeaf] = existing;
+    if (openLeaf) {
+      this.app.workspace.revealLeaf(openLeaf);
       return;
     }
 

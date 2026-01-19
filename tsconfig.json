@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "types": [
+      "vitest"
+    ],
     "baseUrl": ".",
     "inlineSourceMap": true,
     "inlineSources": true,

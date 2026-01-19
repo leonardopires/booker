@@ -1,5 +1,5 @@
 /* @vitest-environment jsdom */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { WorkspaceLeaf } from "obsidian";
 import { BookerPanelView } from "../src/adapters/BookerPanelView";
@@ -10,17 +10,47 @@ import { UserMessagePresenter } from "../src/services/UserMessagePresenter";
 import { FakeAppContext } from "./fakes/FakeAppContext";
 import { FakeNotice } from "./fakes/FakeNotice";
 
+const createSpy = () => {
+  const calls: unknown[][] = [];
+  const spy = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  return { spy, calls };
+};
+
 const setupView = (appContext: FakeAppContext) => {
   const parser = new FrontmatterParser(appContext.metadataCache);
   const resolver = new LinkResolver(appContext.metadataCache);
   const builder = new BookerPanelModelBuilder(appContext.vault, appContext.metadataCache, parser, resolver);
-  const generate = vi.fn(async () => undefined);
-  const openOutput = vi.fn(() => true);
+  const generateSpy = createSpy();
+  const openOutputSpy = createSpy();
+  let openOutputResult = true;
+  const generate = async (...args: unknown[]) => {
+    generateSpy.spy(...args);
+    return undefined;
+  };
+  const openOutput = (...args: unknown[]) => {
+    openOutputSpy.spy(...args);
+    return openOutputResult;
+  };
   const notice = new FakeNotice();
   const presenter = new UserMessagePresenter(notice);
-  const leaf = new WorkspaceLeaf(document.createElement("div"));
+  const leaf = {
+    view: null,
+    containerEl: document.createElement("div")
+  } as unknown as WorkspaceLeaf;
   const view = new BookerPanelView(leaf, builder, generate, openOutput, presenter);
-  return { view, generate, openOutput, notice };
+  return {
+    view,
+    generate,
+    openOutput,
+    notice,
+    generateSpy,
+    openOutputSpy,
+    setOpenOutputResult: (value: boolean) => {
+      openOutputResult = value;
+    }
+  };
 };
 
 describe("BookerPanelView", () => {
@@ -63,13 +93,13 @@ describe("BookerPanelView", () => {
       order: []
     });
 
-    const { view, generate } = setupView(appContext);
+    const { view, generateSpy } = setupView(appContext);
     await view.onOpen();
     view.setActiveFile({ path: "Recipes/Recipe.md", kind: "file" });
     const button = view.contentEl.querySelector<HTMLButtonElement>(".booker-panel__action-button");
     button?.click();
 
-    expect(generate).toHaveBeenCalledWith({ path: "Recipes/Recipe.md", kind: "file" });
+    expect(generateSpy.calls).toEqual([[{ path: "Recipes/Recipe.md", kind: "file" }]]);
   });
 
   it("opens the output file when it exists", async () => {
@@ -83,13 +113,13 @@ describe("BookerPanelView", () => {
       order: []
     });
 
-    const { view, openOutput } = setupView(appContext);
+    const { view, openOutputSpy } = setupView(appContext);
     await view.onOpen();
     view.setActiveFile({ path: "Recipes/Recipe.md", kind: "file" });
     const link = view.contentEl.querySelector<HTMLAnchorElement>(".booker-panel__output-link");
     link?.click();
 
-    expect(openOutput).toHaveBeenCalledWith("Recipes/output/book.md");
+    expect(openOutputSpy.calls).toEqual([["Recipes/output/book.md"]]);
   });
 
   it("notifies when output is missing", async () => {
@@ -102,8 +132,8 @@ describe("BookerPanelView", () => {
       order: []
     });
 
-    const { view, notice, openOutput } = setupView(appContext);
-    openOutput.mockReturnValue(false);
+    const { view, notice, setOpenOutputResult } = setupView(appContext);
+    setOpenOutputResult(false);
     await view.onOpen();
     view.setActiveFile({ path: "Recipes/Recipe.md", kind: "file" });
     const link = view.contentEl.querySelector<HTMLAnchorElement>(".booker-panel__output-link");

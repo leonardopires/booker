@@ -30,8 +30,14 @@ describe("BookerPanelModelBuilder", () => {
       expect(model.missingCount).toBe(1);
       expect(model.outputPath).toBe("Recipes/output/book.md");
       expect(model.outputExists).toBe(true);
-      expect(model.items[0].label).toBe("Sources/One");
-      expect(model.items[1].resolved).toBe(false);
+      const first = model.items[0];
+      const second = model.items[1];
+      expect(first).toBeDefined();
+      expect(second).toBeDefined();
+      if (first && second) {
+        expect(first.label).toBe("Sources/One");
+        expect(second.resolved).toBe(false);
+      }
     }
   });
 
@@ -60,8 +66,12 @@ describe("BookerPanelModelBuilder", () => {
       expect(model.summaryLabel).toBe("Steps");
       expect(model.totalCount).toBe(2);
       expect(model.missingCount).toBe(1);
-      expect(model.items[1].label).toBe("Inline (inline)");
-      expect(model.items[1].resolved).toBe(false);
+      const second = model.items[1];
+      expect(second).toBeDefined();
+      if (second) {
+        expect(second.label).toBe("Inline (inline)");
+        expect(second.resolved).toBe(false);
+      }
     }
   });
 
