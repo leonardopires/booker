@@ -1,10 +1,10 @@
 {
-  "id": "net.leonardopires.booker",
+  "id": "net-leonardopires-booker",
   "name": "Booker",
   "version": "1.0.0",
   "minAppVersion": "1.11.0",
-  "description": "A minimal/no-nonsense Obsidian plugin to compile multiple Markdown files into a single document.",
+  "description": "A minimal/no-nonsense plugin to compile multiple Markdown files into a single document.",
   "author": "Leonardo Pires",
-  "authorUrl": "https://github.com/leonardopires/booker",
+  "authorUrl": "https://github.com/leonardopires",
   "isDesktopOnly": false
 }
