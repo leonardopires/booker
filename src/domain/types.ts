@@ -74,6 +74,19 @@ export type BuildOptions = {
   summary_notice: boolean;
 };
 
+/**
+ * Internal build execution controls that are not part of frontmatter schema.
+ *
+ * Used to control build-time behaviors like TOC emission without mutating user options.
+ */
+export type BuildExecutionOptions = {
+  /**
+   * Controls whether a build emits table-of-contents blocks.
+   * Defaults to "emit" when omitted.
+   */
+  tocEmission?: "emit" | "suppress";
+};
+
 export type BookerRecipeFrontmatter = {
   type?: string;
   title?: string;
