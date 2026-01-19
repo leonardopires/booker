@@ -50,14 +50,17 @@ export class App {
 }
 
 export class Modal {
+  static lastInstance: Modal | null = null;
   contentEl: HTMLElement;
 
   constructor(public app: App) {
     this.contentEl = document.createElement("div");
+    Modal.lastInstance = this;
   }
 
   open(): void {
     this.onOpen();
+    Modal.lastInstance = this;
   }
 
   close(): void {
