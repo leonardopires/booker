@@ -1,11 +1,14 @@
 import { App, Modal } from "obsidian";
+import { FilenamePromptResult } from "../ports/PromptTypes";
 
 /**
- * Modal prompt that asks the user for a filename and resolves with the input value.
+ * Modal prompt that asks the user for a filename and optional prefill settings.
  */
 export class FilenameModal extends Modal {
-  private resolvePromise: ((value: string | null) => void) | null = null;
+  private resolvePromise: ((value: FilenamePromptResult | null) => void) | null = null;
   private inputEl: HTMLInputElement | null = null;
+  private prefillCheckbox: HTMLInputElement | null = null;
+  private includeSubfoldersCheckbox: HTMLInputElement | null = null;
   private didSubmit = false;
 
   constructor(
@@ -19,9 +22,9 @@ export class FilenameModal extends Modal {
   /**
    * Open the modal and resolve with the user input or null if canceled.
    *
-   * @returns Promise that resolves to the provided filename or null.
+   * @returns Promise that resolves to the provided filename data or null.
    */
-  openAndGetValue(): Promise<string | null> {
+  openAndGetValue(): Promise<FilenamePromptResult | null> {
     this.open();
     return new Promise((resolve) => {
       this.resolvePromise = resolve;
@@ -44,6 +47,22 @@ export class FilenameModal extends Modal {
     }
     this.inputEl = input;
 
+    const prefillRow = this.createElement(this.contentEl, "label", "booker-panel__modal-checkbox");
+    const prefillCheckbox = this.createElement(prefillRow, "input");
+    prefillCheckbox.type = "checkbox";
+    prefillCheckbox.checked = true;
+    this.prefillCheckbox = prefillCheckbox;
+    const prefillLabel = this.createElement(prefillRow, "span");
+    prefillLabel.textContent = "Pre-fill list from this folder";
+
+    const includeRow = this.createElement(this.contentEl, "label", "booker-panel__modal-checkbox");
+    const includeCheckbox = this.createElement(includeRow, "input");
+    includeCheckbox.type = "checkbox";
+    includeCheckbox.checked = false;
+    this.includeSubfoldersCheckbox = includeCheckbox;
+    const includeLabel = this.createElement(includeRow, "span");
+    includeLabel.textContent = "Include subfolders";
+
     const buttonRow = this.createElement(this.contentEl, "div", "booker-panel__modal-actions");
 
     const cancelButton = this.createElement(buttonRow, "button");
@@ -54,12 +73,12 @@ export class FilenameModal extends Modal {
     const submitButton = this.createElement(buttonRow, "button");
     submitButton.type = "button";
     submitButton.textContent = "Create";
-    submitButton.addEventListener("click", () => this.complete(this.inputEl?.value ?? ""));
+    submitButton.addEventListener("click", () => this.complete(this.buildResult()));
 
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        this.complete(this.inputEl?.value ?? "");
+        this.complete(this.buildResult());
       }
     });
 
@@ -80,7 +99,7 @@ export class FilenameModal extends Modal {
   /**
    * Resolve the modal promise and close the modal.
    */
-  private complete(value: string | null): void {
+  private complete(value: FilenamePromptResult | null): void {
     if (this.resolvePromise) {
       this.didSubmit = true;
       const resolver = this.resolvePromise;
@@ -88,6 +107,17 @@ export class FilenameModal extends Modal {
       resolver(value);
       this.close();
     }
+  }
+
+  /**
+   * Build the resolved modal result from current input values.
+   */
+  private buildResult(): FilenamePromptResult {
+    return {
+      filename: this.inputEl?.value ?? "",
+      prefillFromFolder: this.prefillCheckbox?.checked ?? true,
+      includeSubfolders: this.includeSubfoldersCheckbox?.checked ?? false
+    };
   }
 
   /**

@@ -51,6 +51,27 @@ class ObsidianVault implements IVault {
     }
     return null;
   }
+
+  listFolderFiles(folder: FileRef, recursive: boolean): FileRef[] {
+    const results: FileRef[] = [];
+    const root = folder.path ? this.app.vault.getAbstractFileByPath(folder.path) : this.app.vault.getRoot();
+    if (!(root instanceof TFolder)) {
+      return results;
+    }
+
+    const walk = (current: TFolder): void => {
+      for (const child of current.children) {
+        if (child instanceof TFile) {
+          results.push(toFileRef(child));
+        } else if (recursive && child instanceof TFolder) {
+          walk(child);
+        }
+      }
+    };
+
+    walk(root);
+    return results;
+  }
 }
 
 /**

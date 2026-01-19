@@ -22,6 +22,10 @@ export interface IVault {
   create(path: string, content: string): Promise<FileRef>;
   createFolder(path: string): Promise<void>;
   getFileByPath(path: string): FileRef | null;
+  /**
+   * List file refs inside a folder, optionally including subfolders.
+   */
+  listFolderFiles(folder: FileRef, recursive: boolean): FileRef[];
 }
 
 /**

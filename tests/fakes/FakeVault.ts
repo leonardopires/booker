@@ -55,4 +55,25 @@ export class FakeVault implements IVault {
     }
     return null;
   }
+
+  listFolderFiles(folder: FileRef, recursive: boolean): FileRef[] {
+    const normalizedFolder = normalizePath(folder.path);
+    const prefix = normalizedFolder ? `${normalizedFolder}/` : "";
+    const matches: FileRef[] = [];
+
+    for (const path of this.files.keys()) {
+      const normalizedPath = normalizePath(path);
+      if (recursive) {
+        if (!normalizedFolder || normalizedPath.startsWith(prefix)) {
+          matches.push({ path: normalizedPath, kind: "file" });
+        }
+        continue;
+      }
+      if (getDirname(normalizedPath) === normalizedFolder) {
+        matches.push({ path: normalizedPath, kind: "file" });
+      }
+    }
+
+    return matches;
+  }
 }

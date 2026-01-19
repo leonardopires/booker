@@ -11,8 +11,9 @@ import { MarkdownTransform } from "../services/MarkdownTransform";
 import { UserMessagePresenter } from "../services/UserMessagePresenter";
 import { VaultIO } from "../services/VaultIO";
 import { FileRef, IMetadataCache, IVault } from "../ports/IAppContext";
+import { FilenamePromptResult } from "../ports/PromptTypes";
 
-type PromptFunction = (message: string, defaultValue?: string) => Promise<string | null>;
+type PromptFunction = (message: string, defaultValue?: string) => Promise<FilenamePromptResult | null>;
 type OpenFileFunction = (file: FileRef) => void;
 
 /**
@@ -70,6 +71,7 @@ export class BookerContext {
     this.fileCreator = new BookerFileCreator({
       vault: this.vault,
       presenter: this.presenter,
+      parser: this.parser,
       prompt,
       openFile
     });

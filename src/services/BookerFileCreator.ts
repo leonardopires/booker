@@ -1,5 +1,7 @@
 import { FileRef, IVault } from "../ports/IAppContext";
+import { FilenamePromptResult } from "../ports/PromptTypes";
 import { getDirname, normalizePath } from "../utils/PathUtils";
+import { FrontmatterParser } from "./FrontmatterParser";
 import { UserMessagePresenter } from "./UserMessagePresenter";
 
 /**
@@ -7,7 +9,7 @@ import { UserMessagePresenter } from "./UserMessagePresenter";
  */
 export type BookerTemplateKind = "recipe" | "bundle";
 
-type PromptFunction = (message: string, defaultValue?: string) => Promise<string | null>;
+type PromptFunction = (message: string, defaultValue?: string) => Promise<FilenamePromptResult | null>;
 type OpenFileFunction = (file: FileRef) => void;
 
 const RECIPE_TEMPLATE = `---
@@ -46,13 +48,14 @@ This bundle combines multiple recipes or bundles.
 `;
 
 /**
- * Creates Booker recipe or bundle files after prompting for a filename.
+ * Creates Booker recipe or bundle files after prompting for a filename and prefill options.
  */
 export class BookerFileCreator {
   constructor(
     private readonly context: {
       vault: IVault;
       presenter: UserMessagePresenter;
+      parser: FrontmatterParser;
       prompt: PromptFunction;
       openFile: OpenFileFunction;
     }
@@ -86,17 +89,19 @@ export class BookerFileCreator {
    * @returns The created file ref, or null if creation is canceled or invalid.
    */
   private async createFromTemplate(target: FileRef, kind: BookerTemplateKind): Promise<FileRef | null> {
-    const folder = target.kind === "folder" ? target.path : getDirname(target.path) ?? "";
+    const folder = normalizePath(
+      target.kind === "folder" ? target.path : getDirname(target.path) ?? ""
+    );
     const defaultName = `New ${kind === "recipe" ? "recipe" : "bundle"}`;
-    const name = await this.context.prompt(
+    const promptResult = await this.context.prompt(
       `New ${kind === "recipe" ? "recipe" : "bundle"} filename`,
       defaultName
     );
-    if (name === null) {
+    if (promptResult === null) {
       return null;
     }
 
-    const trimmed = name.trim();
+    const trimmed = promptResult.filename.trim();
     if (!trimmed) {
       this.context.presenter.showWarning("Please enter a filename.");
       return null;
@@ -114,8 +119,81 @@ export class BookerFileCreator {
 
     const template = kind === "recipe" ? RECIPE_TEMPLATE : BUNDLE_TEMPLATE;
     const content = template.replace(/\$FILENAME\$/gm, filenameNoExt);
-    const created = await this.context.vault.create(path, content);
+    const finalContent = promptResult.prefillFromFolder
+      ? await this.applyPrefill(content, {
+          folder,
+          kind,
+          includeSubfolders: promptResult.includeSubfolders,
+          excludePath: path
+        })
+      : content;
+    const created = await this.context.vault.create(path, finalContent);
     this.context.openFile(created);
     return created;
+  }
+
+  /**
+   * Replace the order/targets list with a filtered set of wikilinks from the target folder.
+   */
+  private async applyPrefill(
+    content: string,
+    options: {
+      folder: string;
+      kind: BookerTemplateKind;
+      includeSubfolders: boolean;
+      excludePath: string;
+    }
+  ): Promise<string> {
+    const items = await this.collectPrefillTargets(options);
+    const listLines = items.length > 0 ? items : ['  - "[[]]"'];
+    const listKey = options.kind === "recipe" ? "order" : "targets";
+    const listBlock = `${listKey}:\n${listLines.join("\n")}`;
+    const placeholder = new RegExp(`${listKey}:\\n  - "\\[\\[\\]\\]"`);
+    return content.replace(placeholder, listBlock);
+  }
+
+  /**
+   * Collect and format wikilinks from the target folder based on the template kind.
+   */
+  private async collectPrefillTargets(options: {
+    folder: string;
+    kind: BookerTemplateKind;
+    includeSubfolders: boolean;
+    excludePath: string;
+  }): Promise<string[]> {
+    const folderRef: FileRef = { path: options.folder, kind: "folder" };
+    const candidates = this.context.vault.listFolderFiles(folderRef, options.includeSubfolders);
+    const normalizedExclude = normalizePath(options.excludePath);
+    const filtered = candidates
+      .map((file) => normalizePath(file.path))
+      .filter((path) => this.isEligiblePath(path, normalizedExclude, options.kind))
+      .sort((a, b) => a.localeCompare(b))
+      .map((path) => {
+        const withoutExt = path.endsWith(".md") ? path.slice(0, -3) : path;
+        return `  - "[[${withoutExt}]]"`;
+      });
+    return filtered;
+  }
+
+  /**
+   * Determine if a path should be included in the prefill list.
+   */
+  private isEligiblePath(path: string, excludePath: string, kind: BookerTemplateKind): boolean {
+    if (!path || path === excludePath) {
+      return false;
+    }
+    if (!path.endsWith(".md")) {
+      return false;
+    }
+    if (path.split("/").includes("output")) {
+      return false;
+    }
+
+    const fileRef: FileRef = { path, kind: "file" };
+    const frontmatter = this.context.parser.getFrontmatter(fileRef);
+    const normalized = this.context.parser.normalizeType(frontmatter?.type);
+    const isBooker = normalized.normalized === "booker-recipe" || normalized.normalized === "booker-bundle";
+
+    return kind === "recipe" ? !isBooker : isBooker;
   }
 }

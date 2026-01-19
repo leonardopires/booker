@@ -9,15 +9,24 @@ describe("FilenameModal", () => {
     const modal = new FilenameModal(new App(), "New recipe", "Default");
     const valuePromise = modal.openAndGetValue();
 
-    const input = modal.contentEl.querySelector<HTMLInputElement>("input");
+    const input = modal.contentEl.querySelector<HTMLInputElement>("input[type=\"text\"]");
     expect(input).not.toBeNull();
     if (input) {
       input.value = "MyFile";
     }
+    const checkboxes = Array.from(
+      modal.contentEl.querySelectorAll<HTMLInputElement>("input[type=\"checkbox\"]")
+    );
+    expect(checkboxes[0]?.checked).toBe(true);
+    expect(checkboxes[1]?.checked).toBe(false);
     const buttons = Array.from(modal.contentEl.querySelectorAll<HTMLButtonElement>("button"));
     buttons[1]?.click();
 
-    await expect(valuePromise).resolves.toBe("MyFile");
+    await expect(valuePromise).resolves.toEqual({
+      filename: "MyFile",
+      prefillFromFolder: true,
+      includeSubfolders: false
+    });
   });
 
   it("resolves with null when canceled", async () => {
