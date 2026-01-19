@@ -144,6 +144,6 @@ describe("BookerPanelView", () => {
     const link = view.contentEl.querySelector<HTMLAnchorElement>(".booker-panel__output-link");
     link?.click();
 
-    expect(notice.messages).toContain("ℹ️ Output not generated yet. Generate first.");
+    expect(notice.messages).toContain("ℹ️ [Recipe] Output not generated yet. Generate first.");
   });
 });

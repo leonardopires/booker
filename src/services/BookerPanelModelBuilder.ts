@@ -1,5 +1,6 @@
 import { BookerBundleFrontmatter, BookerRecipeFrontmatter } from "../domain/types";
 import { FileRef } from "../ports/IAppContext";
+import { resolveFileLabel } from "../utils/LabelUtils";
 import { FrontmatterParser } from "./FrontmatterParser";
 import { LinkResolver } from "./LinkResolver";
 import { IVault, IMetadataCache } from "../ports/IAppContext";
@@ -31,6 +32,8 @@ export type BookerPanelViewModel =
   | {
       state: "booker";
       kind: "recipe" | "bundle";
+      /** Label used for notices related to the active file. */
+      fileLabel: string;
       outputPath: string | null;
       outputExists: boolean;
       summaryLabel: string;
@@ -72,6 +75,7 @@ export class BookerPanelModelBuilder {
     }
 
     const kind = typeInfo.normalized === "booker-recipe" ? "recipe" : "bundle";
+    const fileLabel = resolveFileLabel(file.path, frontmatter ?? null);
     const outputPath = this.getOutputPath(frontmatter, file.path, typeInfo.normalized);
     const outputExists = outputPath
       ? this.context.vault.getFileByPath(outputPath)?.kind === "file"
@@ -87,6 +91,7 @@ export class BookerPanelModelBuilder {
     return {
       state: "booker",
       kind,
+      fileLabel,
       outputPath,
       outputExists,
       summaryLabel,

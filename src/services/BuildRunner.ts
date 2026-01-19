@@ -1,16 +1,20 @@
+import { parseYaml } from "obsidian";
 import {
   AggregateConfig,
   BookerBundleConfig,
   BookerBundleFrontmatter,
   BookerRecipeConfig,
   BookerRecipeFrontmatter,
+  BuildReport,
   BuildResult,
   CompileResult,
   TargetResult
 } from "../domain/types";
 import { BookerError } from "../domain/errors";
-import { FileRef } from "../ports/IAppContext";
+import { FileRef, IVault } from "../ports/IAppContext";
 import { getBasename, normalizePath } from "../utils/PathUtils";
+import { resolveFileLabel } from "../utils/LabelUtils";
+import { BuildReporter } from "./BuildReporter";
 import { Compiler, ContentChunk } from "./Compiler";
 import { FrontmatterParser } from "./FrontmatterParser";
 import { LinkResolver } from "./LinkResolver";
@@ -24,6 +28,7 @@ export type BuildRunnerContext = {
   parser: FrontmatterParser;
   linkResolver: LinkResolver;
   presenter: UserMessagePresenter;
+  vault: IVault;
 };
 
 type BuildArtifact = {
@@ -34,6 +39,7 @@ type BuildArtifact = {
 type BuildOutcome = {
   artifactPath?: string;
   result?: BuildResult;
+  report?: BuildReport;
 };
 
 /**
@@ -44,55 +50,73 @@ export class BuildRunner {
     private readonly context: BuildRunnerContext
   ) {}
 
+  /**
+   * Build the provided file as a Booker recipe or bundle.
+   *
+   * @param file - The file reference to build.
+   * @param callStack - Optional call stack used to detect bundle cycles.
+   * @returns The build outcome, including any generated artifact and report.
+   */
   async buildCurrentFile(file: FileRef, callStack: string[] = []): Promise<BuildOutcome> {
-    const frontmatter = this.context.parser.getFrontmatter(file) as BookerRecipeFrontmatter | null;
+    const reporter = new BuildReporter(this.context.presenter);
+    const frontmatterResult = await this.getFrontmatterWithDiagnostics(file);
+    if (frontmatterResult.error) {
+      this.reportYamlError(file, frontmatterResult.error, reporter);
+      return { report: reporter.getReport() };
+    }
+
+    const frontmatter = frontmatterResult.frontmatter;
+    const fileLabel = resolveFileLabel(file.path, frontmatter ?? null);
     if (!frontmatter) {
-      this.handleError(new BookerError("INVALID_TYPE", "INVALID_TYPE"));
-      return {};
+      this.handleError(new BookerError("INVALID_TYPE", "INVALID_TYPE"), fileLabel, reporter);
+      return { report: reporter.getReport() };
     }
 
     const typeInfo = this.context.parser.normalizeType(frontmatter.type);
     if (!typeInfo.normalized) {
-      this.handleError(new BookerError("INVALID_TYPE", "INVALID_TYPE"));
-      return {};
+      this.handleError(new BookerError("INVALID_TYPE", "INVALID_TYPE"), fileLabel, reporter);
+      return { report: reporter.getReport() };
     }
 
-    this.warnIfDeprecated(file.path, frontmatter.type, typeInfo.deprecated);
+    this.warnIfDeprecated(file.path, frontmatter.type, typeInfo.deprecated, fileLabel, reporter);
 
     try {
       if (typeInfo.normalized === "booker-recipe") {
-        const artifact = await this.buildRecipe(file, frontmatter);
+        const recipeFrontmatter = frontmatter as BookerRecipeFrontmatter;
+        const artifact = await this.buildRecipe(file, recipeFrontmatter, fileLabel, reporter);
         if (artifact) {
-          this.context.presenter.showSuccess("Generation completed successfully.");
-          return { artifactPath: artifact.artifactPath };
+          reporter.success(fileLabel, "Generation completed successfully.");
+          return { artifactPath: artifact.artifactPath, report: reporter.getReport() };
         }
-        return {};
+        return { report: reporter.getReport() };
       }
 
-      const bundleOutcome = await this.buildBundle(file, callStack);
+      const bundleFrontmatter = frontmatter as BookerBundleFrontmatter;
+      const bundleOutcome = await this.buildBundle(file, callStack, reporter, fileLabel, bundleFrontmatter);
       if (bundleOutcome.artifact) {
-        this.context.presenter.showSuccess("Generation completed successfully.");
-        return { artifactPath: bundleOutcome.artifact.artifactPath, result: bundleOutcome.result };
+        return {
+          artifactPath: bundleOutcome.artifact.artifactPath,
+          result: bundleOutcome.result,
+          report: reporter.getReport()
+        };
       }
-      return { result: bundleOutcome.result };
+      return { result: bundleOutcome.result, report: reporter.getReport() };
     } catch (error) {
-      this.handleError(error);
-      return {};
+      this.handleError(error, fileLabel, reporter);
+      return { report: reporter.getReport() };
     }
   }
 
   private async buildBundle(
     file: FileRef,
-    callStack: string[]
+    callStack: string[],
+    reporter: BuildReporter,
+    bundleLabel: string,
+    frontmatter: BookerBundleFrontmatter
   ): Promise<{ artifact: BuildArtifact | null; result: BuildResult }> {
     const normalizedPath = normalizePath(file.path);
     if (callStack.includes(normalizedPath)) {
       throw this.createCycleError([...callStack, normalizedPath]);
-    }
-
-    const frontmatter = this.context.parser.getFrontmatter(file) as BookerRecipeFrontmatter | null;
-    if (!frontmatter) {
-      throw new BookerError("INVALID_TYPE", "INVALID_TYPE");
     }
 
     const typeInfo = this.context.parser.normalizeType(frontmatter.type);
@@ -100,7 +124,7 @@ export class BuildRunner {
       throw new BookerError("INVALID_TYPE", "INVALID_TYPE");
     }
 
-    this.warnIfDeprecated(file.path, frontmatter.type, typeInfo.deprecated);
+    this.warnIfDeprecated(file.path, frontmatter.type, typeInfo.deprecated, bundleLabel, reporter);
 
     const bundleConfig = this.context.parser.parseBundleConfig(frontmatter as BookerBundleFrontmatter, file);
     const bundleName = getBasename(file.path);
@@ -108,13 +132,21 @@ export class BuildRunner {
       throw new BookerError("BUNDLE_MISSING_AGGREGATE_OUTPUT", bundleName);
     }
 
+    reporter.info(bundleLabel, `Running ${bundleConfig.targets.length} targets…`);
+
     const stack = [...callStack, normalizedPath];
     const results: TargetResult[] = [];
     const successfulChunks: ContentChunk[] = [];
     const outputPaths: string[] = [];
+    const summaryCounts = { success: 0, warning: 0, error: 0 };
 
     for (const target of bundleConfig.targets) {
-      const targetResult = await this.buildBundleTarget(target, file, stack, bundleConfig.buildOptions);
+      const targetStartCounts = reporter.getReport().counts;
+      const targetResult = await this.buildBundleTarget(target, file, stack, bundleConfig.buildOptions, reporter);
+      const targetEndCounts = reporter.getReport().counts;
+      const targetDelta = this.diffCounts(targetEndCounts, targetStartCounts);
+      const targetStatus = this.getStatusFromCounts(targetDelta);
+      summaryCounts[targetStatus] += 1;
       results.push(targetResult.result);
       if (targetResult.artifact) {
         successfulChunks.push({
@@ -153,6 +185,9 @@ export class BuildRunner {
       }
     };
 
+    const bundleStatus = this.getStatusFromCounts(summaryCounts);
+    this.reportBundleSummary(bundleLabel, reporter, summaryCounts, bundleStatus);
+
     return {
       artifact: aggregate
         ? {
@@ -168,39 +203,92 @@ export class BuildRunner {
     target: string,
     bundleFile: FileRef,
     callStack: string[],
-    buildOptions: BookerBundleConfig["buildOptions"]
+    buildOptions: BookerBundleConfig["buildOptions"],
+    reporter: BuildReporter
   ): Promise<{ result: TargetResult; artifact?: BuildArtifact }> {
     const resolved = this.resolveSourceFile(target, bundleFile.path);
     const targetName = getBasename(resolved.path);
 
-    const sourceFrontmatter = this.context.parser.getFrontmatter(resolved) as BookerRecipeFrontmatter | null;
-    if (!sourceFrontmatter) {
-      throw new BookerError("INVALID_TYPE", "INVALID_TYPE");
+    const frontmatterResult = await this.getFrontmatterWithDiagnostics(resolved);
+    const targetFrontmatter = frontmatterResult.frontmatter;
+    const targetLabel = resolveFileLabel(resolved.path, targetFrontmatter ?? null);
+    if (frontmatterResult.error) {
+      this.reportYamlError(resolved, frontmatterResult.error, reporter);
+      return {
+        result: {
+          name: targetName,
+          outputPath: "",
+          missingLinks: [],
+          skippedSelfIncludes: [],
+          success: false,
+          resolvedCount: 0
+        }
+      };
+    }
+    if (!targetFrontmatter) {
+      this.handleError(new BookerError("INVALID_TYPE", "INVALID_TYPE"), targetLabel, reporter);
+      return {
+        result: {
+          name: targetName,
+          outputPath: "",
+          missingLinks: [],
+          skippedSelfIncludes: [],
+          success: false,
+          resolvedCount: 0
+        }
+      };
     }
 
-    const typeInfo = this.context.parser.normalizeType(sourceFrontmatter.type);
+    const typeInfo = this.context.parser.normalizeType(targetFrontmatter.type);
     if (!typeInfo.normalized) {
-      throw new BookerError("INVALID_TYPE", "INVALID_TYPE");
+      this.handleError(new BookerError("INVALID_TYPE", "INVALID_TYPE"), targetLabel, reporter);
+      return {
+        result: {
+          name: targetName,
+          outputPath: "",
+          missingLinks: [],
+          skippedSelfIncludes: [],
+          success: false,
+          resolvedCount: 0
+        }
+      };
     }
 
-    this.warnIfDeprecated(resolved.path, sourceFrontmatter.type, typeInfo.deprecated);
+    this.warnIfDeprecated(resolved.path, targetFrontmatter.type, typeInfo.deprecated, targetLabel, reporter);
 
     if (typeInfo.normalized === "booker-recipe") {
-      const recipeConfig = this.context.parser.parseRecipeConfig(
-        sourceFrontmatter as BookerRecipeFrontmatter,
-        resolved
-      );
-      const compileResult = await this.context.compiler.compile(recipeConfig, resolved.path);
-      const targetResult = this.createTargetResult(targetName, recipeConfig.outputPath, compileResult);
-      return this.handleCompileResult(
-        recipeConfig,
-        compileResult,
-        buildOptions,
-        targetResult
-      );
+      try {
+        const recipeConfig = this.context.parser.parseRecipeConfig(
+          targetFrontmatter as BookerRecipeFrontmatter,
+          resolved
+        );
+        const compileResult = await this.context.compiler.compile(recipeConfig, resolved.path);
+        const targetResult = this.createTargetResult(targetName, recipeConfig.outputPath, compileResult);
+        return this.handleCompileResult(
+          recipeConfig,
+          compileResult,
+          buildOptions,
+          targetResult,
+          targetLabel,
+          reporter
+        );
+      } catch (error) {
+        this.handleError(error, targetLabel, reporter);
+        return {
+          result: {
+            name: targetName,
+            outputPath: "",
+            missingLinks: [],
+            skippedSelfIncludes: [],
+            success: false,
+            resolvedCount: 0
+          }
+        };
+      }
     }
 
-    const bundleOutcome = await this.buildBundle(resolved, callStack);
+    const bundleFrontmatter = targetFrontmatter as BookerBundleFrontmatter;
+    const bundleOutcome = await this.buildBundle(resolved, callStack, reporter, targetLabel, bundleFrontmatter);
     if (!bundleOutcome.artifact) {
       const targetResult: TargetResult = {
         name: targetName,
@@ -230,7 +318,9 @@ export class BuildRunner {
     config: BookerRecipeConfig,
     compileResult: CompileResult,
     buildOptions: BookerBundleConfig["buildOptions"],
-    targetResult: TargetResult
+    targetResult: TargetResult,
+    fileLabel: string,
+    reporter: BuildReporter
   ): Promise<{ result: TargetResult; artifact?: BuildArtifact }> {
     if (compileResult.missingLinks.length > 0) {
       console.warn(`Booker: Missing files for ${config.outputPath}:`, compileResult.missingLinks);
@@ -238,7 +328,8 @@ export class BuildRunner {
 
     if (compileResult.skippedSelfIncludes.length > 0) {
       console.warn(`Booker: Skipped self-inclusion for ${config.outputPath}:`, compileResult.skippedSelfIncludes);
-      this.context.presenter.showWarning(
+      reporter.warning(
+        fileLabel,
         "I skipped one step to avoid a loop.\nA file tried to include its own output."
       );
     }
@@ -255,6 +346,12 @@ export class BuildRunner {
 
     if (success && !buildOptions.dry_run) {
       await this.context.compiler.writeOutput(config.outputPath, compileResult.content);
+    }
+
+    if (success) {
+      reporter.success(fileLabel, "Generation completed successfully.");
+    } else {
+      reporter.error(fileLabel, "Generation failed.");
     }
 
     return success
@@ -301,27 +398,33 @@ export class BuildRunner {
     return { outputPath: aggregate.outputPath, content: aggregateContent };
   }
 
-  private buildRecipe(file: FileRef, frontmatter: BookerRecipeFrontmatter): Promise<BuildArtifact | null> {
+  private async buildRecipe(
+    file: FileRef,
+    frontmatter: BookerRecipeFrontmatter,
+    fileLabel: string,
+    reporter: BuildReporter
+  ): Promise<BuildArtifact | null> {
     const config = this.context.parser.parseRecipeConfig(frontmatter, file);
-    return this.context.compiler.compile(config, file.path).then(async (result) => {
-      if (result.skippedSelfIncludes.length > 0) {
-        console.warn(`Booker: Skipped self-inclusion for ${file.path}:`, result.skippedSelfIncludes);
-        this.context.presenter.showWarning(
-          "I skipped one step to avoid a loop.\nA file tried to include its own output."
-        );
-      }
+    const result = await this.context.compiler.compile(config, file.path);
+    if (result.skippedSelfIncludes.length > 0) {
+      console.warn(`Booker: Skipped self-inclusion for ${file.path}:`, result.skippedSelfIncludes);
+      reporter.warning(
+        fileLabel,
+        "I skipped one step to avoid a loop.\nA file tried to include its own output."
+      );
+    }
 
-      if (result.missingLinks.length > 0) {
-        console.warn(`Booker: Missing files for ${file.path}:`, result.missingLinks);
-      }
+    if (result.missingLinks.length > 0) {
+      console.warn(`Booker: Missing files for ${file.path}:`, result.missingLinks);
+    }
 
-      if (result.resolvedCount === 0) {
-        return null;
-      }
+    if (result.resolvedCount === 0) {
+      reporter.error(fileLabel, "Generation failed.");
+      return null;
+    }
 
-      await this.context.compiler.writeOutput(config.outputPath, result.content);
-      return { artifactPath: config.outputPath, content: result.content };
-    });
+    await this.context.compiler.writeOutput(config.outputPath, result.content);
+    return { artifactPath: config.outputPath, content: result.content };
   }
 
   private resolveSourceFile(source: string, fromPath: string): FileRef {
@@ -344,12 +447,18 @@ export class BuildRunner {
     };
   }
 
-  private warnIfDeprecated(path: string, rawType: unknown, deprecated: boolean): void {
+  private warnIfDeprecated(
+    path: string,
+    rawType: unknown,
+    deprecated: boolean,
+    fileLabel: string,
+    reporter: BuildReporter
+  ): void {
     if (!deprecated) {
       return;
     }
     const message = "This note uses a deprecated Booker type. Update to `type: booker-recipe` or `type: booker-bundle`.";
-    this.context.presenter.showWarning(message);
+    reporter.warning(fileLabel, message);
     console.warn(`Booker: Deprecated type "${String(rawType)}" in ${path}.`);
   }
 
@@ -358,13 +467,13 @@ export class BuildRunner {
     return new BookerError("CYCLE_DETECTED", cycle);
   }
 
-  private handleError(error: unknown): void {
+  private handleError(error: unknown, fileLabel: string, reporter: BuildReporter): void {
     const { message, severity } = this.formatUserMessage(error);
     if (severity === "warning") {
-      this.context.presenter.showWarning(message);
+      reporter.warning(fileLabel, message);
       return;
     }
-    this.context.presenter.showError(message);
+    reporter.error(fileLabel, message);
   }
 
   private formatUserMessage(error: unknown): { message: string; severity: "error" | "warning" } {
@@ -427,4 +536,155 @@ export class BuildRunner {
       severity: "error"
     };
   }
+
+  private reportBundleSummary(
+    bundleLabel: string,
+    reporter: BuildReporter,
+    counts: { success: number; warning: number; error: number },
+    status: "success" | "warning" | "error"
+  ): void {
+    if (status === "error") {
+      reporter.announce(
+        "error",
+        bundleLabel,
+        `Failed (✅${counts.success} ⚠️${counts.warning} ❌${counts.error})`
+      );
+      return;
+    }
+    if (status === "warning") {
+      reporter.announce(
+        "warning",
+        bundleLabel,
+        `Completed with warnings (✅${counts.success} ⚠️${counts.warning} ❌${counts.error})`
+      );
+      return;
+    }
+    reporter.announce(
+      "success",
+      bundleLabel,
+      `Completed (✅${counts.success} ⚠️${counts.warning} ❌${counts.error})`
+    );
+  }
+
+  private diffCounts(
+    current: { success: number; warning: number; error: number },
+    baseline: { success: number; warning: number; error: number }
+  ): { success: number; warning: number; error: number } {
+    return {
+      success: Math.max(0, current.success - baseline.success),
+      warning: Math.max(0, current.warning - baseline.warning),
+      error: Math.max(0, current.error - baseline.error)
+    };
+  }
+
+  private getStatusFromCounts(counts: { success: number; warning: number; error: number }): "success" | "warning" | "error" {
+    if (counts.error > 0) {
+      return "error";
+    }
+    if (counts.warning > 0) {
+      return "warning";
+    }
+    return "success";
+  }
+
+  private async getFrontmatterWithDiagnostics(
+    file: FileRef
+  ): Promise<{ frontmatter: BookerRecipeFrontmatter | BookerBundleFrontmatter | null; error: YamlErrorInfo | null }> {
+    const frontmatter = this.context.parser.getFrontmatter(file) as
+      | BookerRecipeFrontmatter
+      | BookerBundleFrontmatter
+      | null;
+    if (frontmatter) {
+      return { frontmatter, error: null };
+    }
+
+    const content = await this.context.vault.read(file);
+    const extracted = this.extractFrontmatter(content);
+    if (!extracted) {
+      return { frontmatter: null, error: null };
+    }
+    if (extracted.error) {
+      return { frontmatter: null, error: extracted.error };
+    }
+
+    try {
+      const parsed = parseYaml(extracted.content);
+      return {
+        frontmatter: (parsed ?? null) as BookerRecipeFrontmatter | BookerBundleFrontmatter | null,
+        error: null
+      };
+    } catch (error) {
+      return {
+        frontmatter: null,
+        error: this.formatYamlError(error)
+      };
+    }
+  }
+
+  private reportYamlError(file: FileRef, error: YamlErrorInfo, reporter: BuildReporter): void {
+    const label = resolveFileLabel(file.path, null);
+    const location =
+      error.line !== null
+        ? ` (line ${error.line}${error.column !== null ? `, col ${error.column}` : ""})`
+        : "";
+    reporter.error(label, `YAML syntax error${location}: ${error.reason}`);
+    reporter.info(
+      label,
+      "Hint: Check indentation, ensure each key has a ':' and list items start with '-'."
+    );
+  }
+
+  private extractFrontmatter(
+    content: string
+  ): { content: string; error: null } | { content: null; error: YamlErrorInfo } | null {
+    const lines = content.split(/\r?\n/);
+    if (lines[0]?.trim() !== "---") {
+      return null;
+    }
+    for (let index = 1; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (!line) {
+        continue;
+      }
+      if (line.trim() === "---" || line.trim() === "...") {
+        return { content: lines.slice(1, index).join("\n"), error: null };
+      }
+    }
+    const lastContentIndex = [...lines].reverse().findIndex((line) => line.trim().length > 0);
+    const lastLineNumber = lastContentIndex >= 0 ? lines.length - lastContentIndex : lines.length;
+    return {
+      content: null,
+      error: {
+        reason: "Missing closing '---' for YAML frontmatter.",
+        line: lastLineNumber,
+        column: null
+      }
+    };
+  }
+
+  private formatYamlError(error: unknown): YamlErrorInfo {
+    const errorObject = error as {
+      message?: string;
+      line?: number;
+      column?: number;
+      mark?: { line?: number; column?: number };
+    };
+    const rawMessage = typeof errorObject.message === "string" ? errorObject.message : "Invalid YAML.";
+    const trimmedMessage = rawMessage.split("\n")[0]?.replace(/^YAMLException:\s*/u, "") ?? "Invalid YAML.";
+    const markLine = errorObject.mark?.line ?? errorObject.line;
+    const markColumn = errorObject.mark?.column ?? errorObject.column;
+    const line = typeof markLine === "number" ? markLine + 1 : null;
+    const column = typeof markColumn === "number" ? markColumn + 1 : null;
+    return {
+      reason: trimmedMessage || "Invalid YAML.",
+      line,
+      column
+    };
+  }
 }
+
+type YamlErrorInfo = {
+  reason: string;
+  line: number | null;
+  column: number | null;
+};

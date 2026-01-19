@@ -10,6 +10,43 @@ export type BookerOptions = {
   heading_offset: number;
 };
 
+/**
+ * Supported levels for build notices.
+ */
+export type BuildEventLevel = "info" | "success" | "warning" | "error";
+
+/**
+ * A single build notice event with an associated file label.
+ */
+export type BuildEvent = {
+  level: BuildEventLevel;
+  fileLabel: string;
+  message: string;
+};
+
+/**
+ * Aggregated status for a build report.
+ */
+export type BuildReportStatus = "success" | "warning" | "error";
+
+/**
+ * Summary counts for build target outcomes.
+ */
+export type BuildReportCounts = {
+  success: number;
+  warning: number;
+  error: number;
+};
+
+/**
+ * Aggregated report for a build run.
+ */
+export type BuildReport = {
+  status: BuildReportStatus;
+  counts: BuildReportCounts;
+  events: BuildEvent[];
+};
+
 export type BuildOptions = {
   stop_on_error: boolean;
   continue_on_missing: boolean;
