@@ -1,8 +1,9 @@
-import { BookerRecipeConfig, CompileResult, TargetResult } from "../domain/types";
+import { BookerRecipeConfig, CompileResult, HeadingEntry, TargetResult } from "../domain/types";
 import { FileRef } from "../ports/IAppContext";
 import { getBasename, normalizePath } from "../utils/PathUtils";
 import { LinkResolver } from "./LinkResolver";
 import { MarkdownTransform } from "./MarkdownTransform";
+import { TableOfContentsBuilder } from "./TableOfContentsBuilder";
 import { VaultIO } from "./VaultIO";
 
 /**
@@ -12,11 +13,13 @@ export type CompilerContext = {
   linkResolver: LinkResolver;
   vaultIO: VaultIO;
   markdownTransform: MarkdownTransform;
+  tocBuilder: TableOfContentsBuilder;
 };
 
 export type ContentChunk = {
   content: string;
   basename: string;
+  sourcePath: string;
 };
 
 /**
@@ -53,10 +56,11 @@ export class Compiler {
       resolvedFiles.push(resolved);
     }
 
-    const content = await this.compileFromFiles(resolvedFiles, config);
+    const { content, headings } = await this.compileFromFiles(resolvedFiles, config);
 
     return {
       content,
+      headings,
       missingLinks,
       skippedSelfIncludes,
       resolvedCount: resolvedFiles.length
@@ -99,21 +103,56 @@ export class Compiler {
    *
    * @param chunks - Ordered list of content chunks.
    * @param config - Recipe configuration used for transforms.
-   * @returns Combined Markdown content.
+   * @param tocHeadingsOverride - Optional headings list to use for TOC rendering.
+   * @returns Combined Markdown content and extracted headings.
    */
-  compileFromChunks(chunks: ContentChunk[], config: BookerRecipeConfig): string {
+  compileFromChunks(
+    chunks: ContentChunk[],
+    config: BookerRecipeConfig,
+    tocHeadingsOverride?: HeadingEntry[]
+  ): { content: string; headings: HeadingEntry[] } {
+    const headings: HeadingEntry[] = [];
     const pieces = chunks.map((chunk) => {
       let content = this.context.markdownTransform.apply(chunk.content, config.options);
       if (!config.options.strip_title) {
         content = this.ensureFilenameTitle(content, chunk.basename);
       }
       content = this.context.markdownTransform.applyHeadingOffset(content, config.options);
+      headings.push(...this.context.markdownTransform.extractHeadings(content, chunk.sourcePath));
       return content.trim();
     });
 
-    const titlePrefix = config.title ? `# ${config.title}\n\n` : "";
+    const titlePrefix = config.title ? `# ${config.title}` : "";
+    if (titlePrefix) {
+      headings.unshift({
+        level: 1,
+        text: config.title ?? "",
+        sourcePath: config.outputPath
+      });
+    }
+
     const joined = this.context.markdownTransform.joinChunks(pieces, config.options.separator);
-    return `${titlePrefix}${joined}`.trimEnd() + "\n";
+    const titleBlock = titlePrefix ? `${titlePrefix}\n\n` : "";
+    const baseContent = `${titleBlock}${joined}`.trimEnd();
+    const tocHeadings = tocHeadingsOverride
+      ? [
+          ...(titlePrefix
+            ? [{ level: 1, text: config.title ?? "", sourcePath: config.outputPath }]
+            : []),
+          ...tocHeadingsOverride
+        ]
+      : headings;
+    const contentWithToc = this.context.tocBuilder.apply(
+      `${baseContent}\n`,
+      tocHeadings,
+      config.options,
+      !!titlePrefix
+    );
+
+    return {
+      content: contentWithToc,
+      headings
+    };
   }
 
   /**
@@ -127,11 +166,14 @@ export class Compiler {
     await this.context.vaultIO.write(outputFile, content);
   }
 
-  private async compileFromFiles(files: FileRef[], config: BookerRecipeConfig): Promise<string> {
+  private async compileFromFiles(
+    files: FileRef[],
+    config: BookerRecipeConfig
+  ): Promise<{ content: string; headings: HeadingEntry[] }> {
     const chunks: ContentChunk[] = [];
     for (const file of files) {
       const content = await this.context.vaultIO.read(file);
-      chunks.push({ content, basename: getBasename(file.path) });
+      chunks.push({ content, basename: getBasename(file.path), sourcePath: file.path });
     }
     return this.compileFromChunks(chunks, config);
   }
