@@ -1,5 +1,47 @@
 import { BookerOptions } from "../domain/types";
 
+const MAX_HEADING_LEVEL = 6;
+
+export const shiftHeadings = (markdown: string, offset: number): string => {
+  if (offset <= 0) {
+    return markdown;
+  }
+
+  const lines = markdown.split("\n");
+  let inFence = false;
+  let fenceMarker: string | null = null;
+
+  const shifted = lines.map((line) => {
+    const fenceMatch = line.match(/^\s*(```+|~~~+)/);
+    if (fenceMatch) {
+      const marker = fenceMatch[1];
+      if (!inFence) {
+        inFence = true;
+        fenceMarker = marker;
+      } else if (fenceMarker && line.trimStart().startsWith(fenceMarker)) {
+        inFence = false;
+        fenceMarker = null;
+      }
+      return line;
+    }
+
+    if (inFence) {
+      return line;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})(\s+.*)$/);
+    if (!headingMatch) {
+      return line;
+    }
+
+    const level = headingMatch[1].length;
+    const adjusted = Math.min(level + offset, MAX_HEADING_LEVEL);
+    return `${"#".repeat(adjusted)}${headingMatch[2]}`;
+  });
+
+  return shifted.join("\n");
+};
+
 export class MarkdownTransform {
   stripFrontmatter(content: string): string {
     if (!content.startsWith("---")) {
@@ -36,6 +78,14 @@ export class MarkdownTransform {
       output = this.stripFirstH1(output);
     }
     return output;
+  }
+
+  /**
+   * Apply the configured heading offset to Markdown content.
+   */
+  applyHeadingOffset(content: string, options: BookerOptions): string {
+    const offset = options.heading_offset ?? 1;
+    return shiftHeadings(content, offset);
   }
 
   joinChunks(chunks: string[], separator: string): string {

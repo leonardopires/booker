@@ -3,6 +3,11 @@ export type BookerOptions = {
   strip_h1: boolean;
   strip_title: boolean;
   separator: string;
+  /**
+   * Offset to apply to Markdown heading levels when concatenating content.
+   * A value of 0 disables shifting.
+   */
+  heading_offset: number;
 };
 
 export type BuildOptions = {
@@ -87,7 +92,8 @@ export const DEFAULT_BOOKER_OPTIONS: BookerOptions = {
   strip_frontmatter: true,
   strip_h1: false,
   strip_title: false,
-  separator: "\n\n---\n\n"
+  separator: "\n\n---\n\n",
+  heading_offset: 1
 };
 
 export const DEFAULT_BUILD_OPTIONS: BuildOptions = {

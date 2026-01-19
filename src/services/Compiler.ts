@@ -85,6 +85,7 @@ export class Compiler {
       if (!config.options.strip_title) {
         content = this.ensureFilenameTitle(content, chunk.basename);
       }
+      content = this.context.markdownTransform.applyHeadingOffset(content, config.options);
       return content.trim();
     });
 
