@@ -31,7 +31,7 @@ describe("shiftHeadings", () => {
     const input = readFixture("basic.md");
 
     expect(shiftHeadings(input, 1)).toBe(
-      "## Title\n### Subtitle\n\nNormal text with `#` inline."
+      "## Title\n### Subtitle\n\nNormal text with `#` inline.\n"
     );
   });
 
@@ -45,19 +45,19 @@ describe("shiftHeadings", () => {
     const input = readFixture("basic.md");
 
     expect(shiftHeadings(input, 2)).toBe(
-      "### Title\n#### Subtitle\n\nNormal text with `#` inline."
+      "### Title\n#### Subtitle\n\nNormal text with `#` inline.\n"
     );
   });
 
   it("clamps headings at level 6", () => {
     const input = readFixture("clamp.md");
 
-    expect(shiftHeadings(input, 2)).toBe("###### Max\n###### Five");
+    expect(shiftHeadings(input, 2)).toBe("###### Max\n###### Five\n");
   });
 
   it("does not modify headings inside fenced code blocks", () => {
     const input = readFixture("fenced.md");
 
-    expect(shiftHeadings(input, 1)).toBe("## Outside\n```md\n# Inside\n```\n## After");
+    expect(shiftHeadings(input, 1)).toBe("## Outside\n```md\n# Inside\n```\n## After\n");
   });
 });
