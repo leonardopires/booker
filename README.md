@@ -82,6 +82,34 @@ Booker: Build current file
 - Booker resolves each item using Obsidian's `metadataCache.getFirstLinkpathDest`, so renames are handled by Obsidian's metadata cache.
 - Missing files are reported in a Notice (count only) and logged to the console.
 
+## Build notices and bundle reporting
+
+Booker emits notices in a consistent, file-labeled format:
+
+- `ℹ️ [File Label] message`
+- `✅ [File Label] message`
+- `⚠️ [File Label] message`
+- `❌ [File Label] message`
+
+The file label is the frontmatter `title` when available, otherwise the note's basename.
+
+When running a bundle, Booker:
+
+1. Shows a start notice for the bundle (`Running N targets…`).
+2. Streams notices from each child recipe/bundle in execution order.
+3. Emits a final summary notice for the bundle:
+   - `✅ [Bundle Title] Completed (✅X ⚠️Y ❌0)`
+   - `⚠️ [Bundle Title] Completed with warnings (✅X ⚠️Y ❌0)`
+   - `❌ [Bundle Title] Failed (✅X ⚠️Y ❌Z)`
+
+## YAML/frontmatter syntax errors
+
+If YAML/frontmatter parsing fails, Booker shows a friendly error notice that includes the file label and any available line/column information, followed by a hint notice. Common YAML fixes include:
+
+- Check indentation, especially under `targets:`.
+- Ensure each key has a `:` (e.g., `output: "path/to/file.md"`).
+- Ensure list items start with `-`.
+
 ## Running tests
 
 ```bash

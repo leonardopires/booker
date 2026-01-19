@@ -54,7 +54,8 @@ export class BookerContext {
       compiler: this.compiler,
       parser: this.parser,
       linkResolver: this.linkResolver,
-      presenter: this.presenter
+      presenter: this.presenter,
+      vault: this.vault
     });
 
     const prompt: PromptFunction = (message, defaultValue) =>

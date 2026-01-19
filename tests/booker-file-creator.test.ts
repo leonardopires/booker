@@ -62,7 +62,7 @@ describe("BookerFileCreator", () => {
     const result = await creator.createRecipe({ path: "Notes", kind: "folder" });
 
     expect(result).toBeNull();
-    expect(notice.messages).toContain("⚠️ Please enter a filename.");
+    expect(notice.messages).toContain("⚠️ [Booker] Please enter a filename.");
   });
 
   it("rejects duplicate filenames", async () => {
@@ -70,6 +70,6 @@ describe("BookerFileCreator", () => {
     const result = await creator.createBundle({ path: "Notes", kind: "folder" });
 
     expect(result).toBeNull();
-    expect(notice.messages).toContain("⚠️ That file already exists. Choose a new name.");
+    expect(notice.messages).toContain("⚠️ [Booker] That file already exists. Choose a new name.");
   });
 });
