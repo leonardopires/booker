@@ -4,7 +4,7 @@
   "description": "A minimal/no-nonsense Obsidian plugin to compile multiple Markdown files into a single document.",
   "main": "dist/main.js",
   "scripts": {
-    "build": "node esbuild.config.mjs production",
+    "build": "node esbuild.config.mjs production && node scripts/copy-main.mjs",
     "dev": "node esbuild.config.mjs development",
     "install:vault": "node scripts/install-to-vault.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -16,7 +16,8 @@
     "plugin",
     "markdown"
   ],
-  "author": "Booker",
+  "author": "Leonardo Pires",
+  "repository": "https://github.com/leonardopires/booker",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.11.25",
