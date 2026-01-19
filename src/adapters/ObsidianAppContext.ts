@@ -1,7 +1,13 @@
 import { App, Notice, TFile, TFolder } from "obsidian";
 import { FileRef, IAppContext, IMetadataCache, INotice, IVault } from "../ports/IAppContext";
 
+/**
+ * Convert an Obsidian TFile into a Booker file reference.
+ */
 const toFileRef = (file: TFile): FileRef => ({ path: file.path, kind: "file" });
+/**
+ * Convert an Obsidian TFolder into a Booker folder reference.
+ */
 const toFolderRef = (folder: TFolder): FileRef => ({ path: folder.path, kind: "folder" });
 
 const toTFile = (app: App, file: FileRef): TFile => {
@@ -12,6 +18,9 @@ const toTFile = (app: App, file: FileRef): TFile => {
   throw new Error(`Booker: File not found: ${file.path}`);
 };
 
+/**
+ * Vault adapter backed by the Obsidian vault API.
+ */
 class ObsidianVault implements IVault {
   constructor(private readonly app: App) {}
 
@@ -44,6 +53,9 @@ class ObsidianVault implements IVault {
   }
 }
 
+/**
+ * Metadata cache adapter backed by the Obsidian metadata cache API.
+ */
 class ObsidianMetadataCache implements IMetadataCache {
   constructor(private readonly app: App) {}
 
@@ -58,12 +70,18 @@ class ObsidianMetadataCache implements IMetadataCache {
   }
 }
 
+/**
+ * Notice adapter backed by Obsidian's Notice API.
+ */
 class ObsidianNotice implements INotice {
   notify(message: string): void {
     new Notice(message);
   }
 }
 
+/**
+ * Adapter that exposes the Obsidian app as a Booker application context.
+ */
 export class ObsidianAppContext implements IAppContext {
   vault: IVault;
   metadataCache: IMetadataCache;
@@ -76,4 +94,7 @@ export class ObsidianAppContext implements IAppContext {
   }
 }
 
+/**
+ * Create a Booker file reference from an Obsidian TFile.
+ */
 export const createFileRef = (file: TFile): FileRef => toFileRef(file);

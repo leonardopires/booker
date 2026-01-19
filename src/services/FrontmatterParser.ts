@@ -19,6 +19,12 @@ type NormalizedType = "booker-recipe" | "booker-bundle";
 export class FrontmatterParser {
   constructor(private readonly metadataCache: IMetadataCache) {}
 
+  /**
+   * Fetch cached frontmatter for a file when available.
+   *
+   * @param file - File reference to look up.
+   * @returns Parsed frontmatter or null when missing.
+   */
   getFrontmatter(file: FileRef): Record<string, unknown> | null {
     const cache = this.metadataCache.getFileCache(file);
     return (cache?.frontmatter ?? null) as Record<string, unknown> | null;
