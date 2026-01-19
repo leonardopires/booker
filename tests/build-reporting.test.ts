@@ -4,6 +4,7 @@ import { Compiler } from "../src/services/Compiler";
 import { FrontmatterParser } from "../src/services/FrontmatterParser";
 import { LinkResolver } from "../src/services/LinkResolver";
 import { MarkdownTransform } from "../src/services/MarkdownTransform";
+import { TableOfContentsBuilder } from "../src/services/TableOfContentsBuilder";
 import { UserMessagePresenter } from "../src/services/UserMessagePresenter";
 import { VaultIO } from "../src/services/VaultIO";
 import { resolveFileLabel } from "../src/utils/LabelUtils";
@@ -14,8 +15,9 @@ const setupRunner = (appContext: FakeAppContext) => {
   const linkResolver = new LinkResolver(appContext.metadataCache);
   const parser = new FrontmatterParser(appContext.metadataCache);
   const markdownTransform = new MarkdownTransform();
+  const tocBuilder = new TableOfContentsBuilder();
   const vaultIO = new VaultIO(appContext.vault);
-  const compiler = new Compiler({ linkResolver, vaultIO, markdownTransform });
+  const compiler = new Compiler({ linkResolver, vaultIO, markdownTransform, tocBuilder });
   const presenter = new UserMessagePresenter(appContext.notice);
   return new BuildRunner({ compiler, parser, linkResolver, presenter, vault: appContext.vault });
 };
