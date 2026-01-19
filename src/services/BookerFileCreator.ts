@@ -20,6 +20,7 @@ options:
   strip_frontmatter: true
   strip_h1: false
   separator: "\\n\\n---\\n\\n"
+  heading_offset: 1
 ---
 
 # New Recipe

@@ -38,7 +38,7 @@ describe("BuildRunner", () => {
     await runner.buildCurrentFile({ path: "Recipe.md", kind: "file" });
 
     const output = await appContext.vault.read({ path: "Output.md", kind: "file" });
-    expect(output).toBe("# Book Title\n\n# One\nIntro.\n\n---\n\n# Two\nSecond.\n");
+    expect(output).toBe("# Book Title\n\n## One\nIntro.\n\n---\n\n## Two\nSecond.\n");
   });
 
   it("builds a bundle with targets and aggregate output", async () => {
@@ -79,10 +79,10 @@ describe("BuildRunner", () => {
     const secondOutput = await appContext.vault.read({ path: "dist/two.md", kind: "file" });
     const aggregateOutput = await appContext.vault.read({ path: "dist/all.md", kind: "file" });
 
-    expect(firstOutput).toBe("# One\nOne content.\n");
+    expect(firstOutput).toBe("## One\nOne content.\n");
     expect(secondOutput).toBe("Two content.\n");
     expect(aggregateOutput).toBe(
-      "# All\n\n# one\n\n# One\nOne content.\n\n---\n\n# two\n\nTwo content.\n"
+      "# All\n\n## one\n\n### One\nOne content.\n\n---\n\n## two\n\nTwo content.\n"
     );
   });
 
@@ -123,8 +123,39 @@ describe("BuildRunner", () => {
 
     const aggregateOutput = await appContext.vault.read({ path: "dist/trilogia.md", kind: "file" });
     expect(aggregateOutput).toBe(
-      "# Trilogia\n\n# livro-final\n\n# Livro\n\n# livro\n\n# One\nOne content.\n"
+      "# Trilogia\n\n## livro-final\n\n## Livro\n\n### livro\n\n#### One\nOne content.\n"
     );
+  });
+
+  it("applies heading offsets to bundle aggregates", async () => {
+    const appContext = new FakeAppContext({
+      "Bundle.md": "",
+      "Recipe.md": "",
+      "chapters/One.md": "# One\nContent."
+    });
+
+    appContext.metadataCache.setFrontmatter("Recipe.md", {
+      type: "booker-recipe",
+      output: "dist/one.md",
+      order: ["chapters/One"],
+      options: { heading_offset: 0 }
+    });
+
+    appContext.metadataCache.setFrontmatter("Bundle.md", {
+      type: "booker-bundle",
+      targets: ["Recipe"],
+      aggregate: {
+        title: "All",
+        output: "dist/all.md",
+        options: { heading_offset: 2 }
+      }
+    });
+
+    const { runner } = setupServices(appContext);
+    await runner.buildCurrentFile({ path: "Bundle.md", kind: "file" });
+
+    const aggregateOutput = await appContext.vault.read({ path: "dist/all.md", kind: "file" });
+    expect(aggregateOutput).toBe("# All\n\n### one\n\n### One\nContent.\n");
   });
 
   it("detects bundle cycles", async () => {
