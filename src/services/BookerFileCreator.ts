@@ -19,7 +19,6 @@ order:
 options:
   strip_frontmatter: true
   strip_h1: false
-  separator: "\\n\\n---\\n\\n"
   heading_offset: 1
 ---
 
@@ -113,8 +112,8 @@ export class BookerFileCreator {
 
     const filenameNoExt = filename.endsWith(".md") ? filename.substring(0, filename.length - 3) : filename;
 
-    const content = kind === "recipe" ? RECIPE_TEMPLATE : BUNDLE_TEMPLATE;
-    content.replace(/\$FILENAME$/gm, filenameNoExt);
+    const template = kind === "recipe" ? RECIPE_TEMPLATE : BUNDLE_TEMPLATE;
+    const content = template.replace(/\$FILENAME\$/gm, filenameNoExt);
     const created = await this.context.vault.create(path, content);
     this.context.openFile(created);
     return created;
