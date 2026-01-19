@@ -77,18 +77,20 @@ describe("BookerContext", () => {
     expect(context.panelModelBuilder).toBeDefined();
 
     const createPromise = context.fileCreator.createRecipe({ path: "Notes", kind: "folder" });
-    const modal = modalType.lastInstance;
+    const modal = modalType.lastInstance as Modal | null;
     expect(modal).not.toBeNull();
-    if (modal) {
-      const input = modal.contentEl.querySelector<HTMLInputElement>("input");
-      expect(input).not.toBeNull();
-      if (input) {
-        input.value = "ContextRecipe";
-      }
-      const buttons = Array.from(modal.contentEl.querySelectorAll<HTMLButtonElement>("button"));
-      const submit = buttons[1];
-      submit?.click();
+    if (!modal) {
+      throw new Error("Expected modal instance to be available.");
     }
+    const modalContent = (modal as { contentEl: HTMLElement }).contentEl;
+    const input = modalContent.querySelector<HTMLInputElement>("input");
+    expect(input).not.toBeNull();
+    if (input) {
+      input.value = "ContextRecipe";
+    }
+    const buttons = Array.from(modalContent.querySelectorAll<HTMLButtonElement>("button"));
+    const submit = buttons[1] as HTMLButtonElement | undefined;
+    submit?.click();
 
     await createPromise;
 
