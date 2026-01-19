@@ -1,121 +1,282 @@
 # Booker
 
-A minimal/no-nonsense Obsidian plugin to compile multiple Markdown files into a single document.
+**Booker** is a minimal, no‑nonsense Obsidian plugin for compiling long‑form writing projects made of many Markdown notes into clean, structured documents.
 
-## What it does
+It is designed for:
+- writers (novels, non‑fiction, academic work, long essays)
+- users migrating from **Longform**
+- developers who want deterministic, frontmatter‑driven builds
 
-Booker reads a recipe or bundle note that has YAML frontmatter describing which notes to include, then concatenates them into one output Markdown note. Everything is driven by that frontmatter. No external config files.
+No external config files.  
+No UI‑heavy workflows.  
+Everything lives inside your notes.
 
-## Example recipe note
+---
+
+## What Booker Does (In Plain English)
+
+Booker lets you:
+
+- Write your project as **many small notes**
+- Define *how they are assembled* using YAML frontmatter
+- Generate **one clean output file** (or many)
+- Build **hierarchies** (chapters → acts → books → trilogies)
+- Control headings, separators, tables of contents, and build behavior
+
+You never leave Obsidian.
+You never leave Markdown.
+
+---
+
+## Core Concepts
+
+### Recipe
+
+A **recipe** is a note that says:
+
+> “Take these notes, in this order, and merge them into one document.”
+
+Think of it as:
+- a chapter
+- an act
+- a section
+- a standalone document
+
+Recipes generate **one output file**.
+
+### Bundle
+
+A **bundle** is a note that says:
+
+> “Run these recipes (or other bundles), then merge *their outputs* into a larger document.”
+
+Think of it as:
+- a full book
+- a collection of acts
+- a trilogy
+- an omnibus
+
+Bundles can build **trees**, not just lists.
+
+---
+
+## Quick Start (Writers)
+
+### 1. Create a Recipe
+
+Create a new note and add:
 
 ```yaml
 ---
 type: booker-recipe
-title: "Livro 1"
-output: "Longinus/Livro 1/Livro 1 - Compilado.md"
+title: "Act I – Order"
+output: "~/output/Act I.md"
 order:
-  - "[[L1-A1-C001]]"
-  - "[[Folder/Note Name|Alias]]"
-  - "Folder/Note Name"
-options:
-  strip_frontmatter: true
-  strip_h1: false
-  strip_title: false
-  separator: "\n\n---\n\n"
-  heading_offset: 1
+  - "[[Scene 01]]"
+  - "[[Scene 02]]"
+  - "[[Scene 03]]"
+recipe_strip_frontmatter: true
+recipe_heading_offset: 1
 ---
 ```
 
-By default, Booker prefixes each compiled note with an H1 matching the file name.
-Set `strip_title: true` to skip adding the filename title.
+Now run:
 
-## Example bundle note (targets + aggregate)
+**Command Palette → Booker: Generate current file**
+
+You’ll get `Act I.md` with all scenes merged.
+
+---
+
+### 2. Create a Bundle
+
+Create another note:
 
 ```yaml
 ---
 type: booker-bundle
+title: "Book One"
 targets:
-  - "[[Ato I - Recipe]]"
-  - "[[Ato II - Recipe]]"
-aggregate:
-  title: "Longinus — Livro 1"
-  output: "Longinus/Livro 1/Livro 1 - Compilado.md"
-  options:
-    strip_frontmatter: true
-    strip_h1: false
-    separator: "\n\n"
-    heading_offset: 1
-build_options:
-  stop_on_error: true
-  continue_on_missing: false
-  dry_run: false
-  summary_notice: true
+  - "[[Act I – Order]]"
+  - "[[Act II – Crossing]]"
+  - "[[Act III – Rupture]]"
+
+aggregate_output: "~/output/Book One.md"
+aggregate_strip_title: true
 ---
 ```
 
-Bundle targets are an ordered list of wikilinks or paths to `booker-recipe` or `booker-bundle` notes. Aggregation concatenates successful target outputs in order, using the aggregate options.
+Run the command again.
 
-Inline bundle targets and per-target overrides are deprecated. Update any older bundle YAML to the simple `targets:` list before generating.
+You now have a **book built from acts**, built from scenes.
 
-### Heading offsets
+---
 
-Use `heading_offset` to shift Markdown headings down by N levels during concatenation. The default is `1`, and `0` disables shifting. Apply it per recipe (`options.heading_offset`) or per bundle aggregate (`aggregate.options.heading_offset`). Headings inside fenced code blocks are ignored.
+## Table of Contents (TOC)
 
-## Backward-compatible types
+Booker can generate a Table of Contents automatically.
 
-Old 0.x frontmatter types still work, but show a warning Notice:
+### Defaults
 
-- `booker` → `booker-recipe`
-- `booker-build` → `booker-bundle`
-
-## Command
-
-Run the command in the Command Palette:
-
-```
-Booker: Build current file
+```yaml
+toc: false
+toc_title: "Table of Contents"
+toc_scope: tree
+toc_depth: 4
+toc_include_h1: true
 ```
 
-## Notes on link resolution
+### Enable TOC in a Recipe
 
-- `order` items can be full wikilinks (`[[Note]]` or `[[Folder/Note|Alias]]`) or plain link paths (`Folder/Note`).
-- Booker resolves each item using Obsidian's `metadataCache.getFirstLinkpathDest`, so renames are handled by Obsidian's metadata cache.
-- Missing files are reported in a Notice (count only) and logged to the console.
-
-## Build notices and bundle reporting
-
-Booker emits notices in a consistent, file-labeled format:
-
-- `ℹ️ [File Label] message`
-- `✅ [File Label] message`
-- `⚠️ [File Label] message`
-- `❌ [File Label] message`
-
-The file label is the frontmatter `title` when available, otherwise the note's basename.
-
-When running a bundle, Booker:
-
-1. Shows a start notice for the bundle (`Running N targets…`).
-2. Streams notices from each child recipe/bundle in execution order.
-3. Emits a final summary notice for the bundle:
-   - `✅ [Bundle Title] Completed (✅X ⚠️Y ❌0)`
-   - `⚠️ [Bundle Title] Completed with warnings (✅X ⚠️Y ❌0)`
-   - `❌ [Bundle Title] Failed (✅X ⚠️Y ❌Z)`
-
-## YAML/frontmatter syntax errors
-
-If YAML/frontmatter parsing fails, Booker shows a friendly error notice that includes the file label and any available line/column information, followed by a hint notice. Common YAML fixes include:
-
-- Check indentation, especially under `targets:`.
-- Ensure each key has a `:` (e.g., `output: "path/to/file.md"`).
-- Ensure list items start with `-`.
-
-## Running tests
-
-```bash
-npm run typecheck
-npm run test
+```yaml
+recipe_toc: true
+recipe_toc_depth: 3
 ```
+
+### Enable TOC in a Bundle (recommended)
+
+```yaml
+aggregate_toc: true
+aggregate_toc_scope: tree
+```
+
+This generates **one global TOC** for the whole book, even if child recipes disable TOC.
+
+TOC entries:
+- are nested
+- link to headings
+- ignore fenced code blocks
+- handle duplicate headings safely
+
+---
+
+## For Longform Users
+
+If you are coming from **Longform**, here is how to think about Booker:
+
+| Longform | Booker |
+|--------|--------|
+| Project | Bundle |
+| Chapter | Recipe |
+| Scene | Regular note |
+| Compile | Generate |
+| Sidebar UI | YAML + Command |
+| Metadata | Frontmatter |
+
+Key differences:
+
+- Booker is **explicit** (you always see what’s built)
+- No hidden project state
+- No plugin‑owned files
+- Fully Git‑friendly
+
+Once you get used to recipes and bundles, Booker scales better for large works.
+
+---
+
+## Frontmatter Schema (Flat & Property‑Friendly)
+
+Booker uses **flat, prefixed keys** so everything works well with Obsidian Properties.
+
+### Recipe Keys
+
+```yaml
+type: booker-recipe
+title: string
+output: string
+order: string[]
+
+recipe_strip_frontmatter: boolean
+recipe_strip_h1: boolean
+recipe_strip_title: boolean
+recipe_separator: string
+recipe_heading_offset: number
+
+recipe_toc: boolean
+recipe_toc_title: string
+recipe_toc_depth: number
+recipe_toc_include_h1: boolean
+```
+
+### Bundle Keys
+
+```yaml
+type: booker-bundle
+title: string
+targets: string[]
+
+aggregate_output: string
+aggregate_title: string
+aggregate_strip_frontmatter: boolean
+aggregate_strip_h1: boolean
+aggregate_strip_title: boolean
+aggregate_heading_offset: number
+
+aggregate_toc: boolean
+aggregate_toc_scope: "file" | "tree"
+aggregate_toc_depth: number
+aggregate_toc_include_h1: boolean
+
+build_stop_on_error: boolean
+build_continue_on_missing: boolean
+build_summary_notice: boolean
+```
+
+---
+
+## Notices & Build Feedback
+
+Booker reports progress clearly:
+
+- ℹ️ `[File]` info
+- ✅ `[File]` success
+- ⚠️ `[File]` warning
+- ❌ `[File]` error
+
+Bundles stream notices from child builds and finish with a summary:
+
+```
+✅ [Book One] Completed (✅3 ⚠️1 ❌0)
+```
+
+---
+
+## YAML Error Help
+
+If your YAML is invalid, Booker will tell you:
+- which file failed
+- where (line/column if possible)
+- how to fix common mistakes
+
+No stack traces.
+No cryptic errors.
+
+---
+
+## Commands & UI
+
+- **Booker: Generate current file**
+- **Booker: Toggle panel**
+- Right‑click → Booker → New recipe / New bundle
+- Ribbon icon opens the Booker panel
+
+The panel is read‑only and reflects the active file.
+
+---
+
+## Philosophy
+
+Booker is opinionated:
+
+- Markdown first
+- Files over UI state
+- Deterministic builds
+- Explicit structure
+- Scales from short essays to multi‑book sagas
+
+If you write long things, Booker stays out of your way.
+
+---
 
 ## License
 
