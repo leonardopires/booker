@@ -7,7 +7,7 @@ const LIST_INDENT = "  ";
  */
 export class TableOfContentsBuilder {
   /**
-   * Render a nested Markdown table of contents from headings.
+   * Render a nested Markdown table of contents with Obsidian heading links.
    */
   render(headings: HeadingEntry[], options: BookerOptions): string {
     if (!options.toc) {
@@ -23,7 +23,7 @@ export class TableOfContentsBuilder {
 
     const listLines = filtered.map((heading) => {
       const indent = LIST_INDENT.repeat(Math.max(heading.level - 1, 0));
-      return `${indent}- ${heading.text}`;
+      return `${indent}- [[#${heading.text}]]`;
     });
 
     const listBlock = listLines.join("\n");
@@ -34,14 +34,14 @@ export class TableOfContentsBuilder {
     }
 
     if (!listBlock) {
-      return `## ${title}`;
+      return `# ${title}`;
     }
 
-    return `## ${title}\n\n${listBlock}`;
+    return `# ${title}\n\n${listBlock}`;
   }
 
   /**
-   * Insert a rendered table of contents into content.
+   * Insert a rendered table of contents into content, optionally after the document title.
    */
   apply(
     content: string,

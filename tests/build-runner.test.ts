@@ -214,6 +214,27 @@ describe("BuildRunner", () => {
     expect(appContext.notice.messages.join("\n")).toContain("deprecated Booker type");
   });
 
+  it("includes deprecation warnings with location and hints", async () => {
+    const appContext = new FakeAppContext({
+      "Recipe.md": "---\ntype: booker-recipe\noutput: \"dist/out.md\"\norder:\n  - \"Chapter\"\noptions:\n  strip_h1: true\n---\n# Recipe\n",
+      "Chapter.md": "# Chapter\nBody."
+    });
+
+    appContext.metadataCache.setFrontmatter("Recipe.md", {
+      type: "booker-recipe",
+      output: "dist/out.md",
+      order: ["Chapter"],
+      options: { strip_h1: true }
+    });
+
+    const { runner } = setupServices(appContext);
+    await runner.buildCurrentFile({ path: "Recipe.md", kind: "file" });
+
+    const messages = appContext.notice.messages.join("\n");
+    expect(messages).toContain("⚠️ [Recipe] Deprecated recipe schema (line 5, col 1):");
+    expect(messages).toContain("Move options.strip_h1 to recipe_strip_h1.");
+  });
+
   it("shows friendly error messages with emojis", async () => {
     const appContext = new FakeAppContext({
       "Recipe.md": ""

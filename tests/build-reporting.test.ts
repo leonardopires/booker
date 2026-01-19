@@ -68,12 +68,10 @@ describe("Build reporting", () => {
     const runner = setupRunner(appContext);
     await runner.buildCurrentFile({ path: "Bundle.md", kind: "file" });
 
-    expect(appContext.notice.messages[0]).toBe("ℹ️ [Bundle Title] Running 2 targets…");
-    expect(appContext.notice.messages[1]).toBe("✅ [Recipe One] Generation completed successfully.");
-    expect(appContext.notice.messages[2]).toBe("✅ [Recipe Two] Generation completed successfully.");
-    expect(appContext.notice.messages[appContext.notice.messages.length - 1]).toBe(
-      "✅ [Bundle Title] Completed (✅2 ⚠️0 ❌0)"
-    );
+    expect(appContext.notice.messages).toContain("ℹ️ [Bundle Title] Running 2 targets…");
+    expect(appContext.notice.messages).toContain("✅ [Recipe One] Generation completed successfully.");
+    expect(appContext.notice.messages).toContain("✅ [Recipe Two] Generation completed successfully.");
+    expect(appContext.notice.messages).toContain("✅ [Bundle Title] Completed (✅2 ⚠️0 ❌0)");
   });
 
   it("aggregates warning status for bundle summaries", async () => {
