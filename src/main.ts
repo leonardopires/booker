@@ -22,8 +22,13 @@ const BOOKER_ICON_SVG = `
 
 const BOOKER_ICON_ID = "lp-booker";
 
-
+/**
+ * Obsidian plugin entry point for Booker.
+ */
 export default class BookerPlugin extends Plugin {
+  /**
+   * Initialize Booker services, views, and commands on plugin load.
+   */
   async onload(): Promise<void> {
     const context = new BookerContext(this.app);
     const presenter = context.presenter;

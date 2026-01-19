@@ -228,6 +228,52 @@ describe("BuildRunner", () => {
     expect(appContext.notice.messages.join("\n")).toContain("❌ [Recipe] This recipe has no output file.");
   });
 
+  it("shows missing order errors with friendly messaging", async () => {
+    const appContext = new FakeAppContext({
+      "Recipe.md": ""
+    });
+
+    appContext.metadataCache.setFrontmatter("Recipe.md", {
+      type: "booker-recipe",
+      output: "dist/out.md",
+      order: []
+    });
+
+    const { runner } = setupServices(appContext);
+    await runner.buildCurrentFile({ path: "Recipe.md", kind: "file" });
+
+    expect(appContext.notice.messages.join("\n")).toContain("❌ [Recipe] This recipe has no sources yet.");
+  });
+
+  it("shows missing targets errors with friendly messaging", async () => {
+    const appContext = new FakeAppContext({
+      "Bundle.md": ""
+    });
+
+    appContext.metadataCache.setFrontmatter("Bundle.md", {
+      type: "booker-bundle",
+      targets: []
+    });
+
+    const { runner } = setupServices(appContext);
+    await runner.buildCurrentFile({ path: "Bundle.md", kind: "file" });
+
+    expect(appContext.notice.messages.join("\n")).toContain("❌ [Bundle] This bundle has no targets yet.");
+  });
+
+  it("does not crash on non-Booker notes", async () => {
+    const appContext = new FakeAppContext({
+      "Note.md": "# Not a Booker note"
+    });
+
+    const { runner } = setupServices(appContext);
+    await runner.buildCurrentFile({ path: "Note.md", kind: "file" });
+
+    expect(appContext.notice.messages.join("\n")).toContain(
+      "❌ [Note] This note isn’t a Booker recipe or bundle."
+    );
+  });
+
   it("warns and aborts when bundles use deprecated target schemas", async () => {
     const appContext = new FakeAppContext({
       "Bundle.md": "",

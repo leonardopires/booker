@@ -25,6 +25,13 @@ export type ContentChunk = {
 export class Compiler {
   constructor(private readonly context: CompilerContext) {}
 
+  /**
+   * Compile a recipe into a single Markdown output string.
+   *
+   * @param config - Recipe configuration to compile.
+   * @param contextPath - Path used to resolve relative links.
+   * @returns Compilation result with content and diagnostics.
+   */
   async compile(config: BookerRecipeConfig, contextPath: string): Promise<CompileResult> {
     const resolvedFiles: FileRef[] = [];
     const missingLinks: string[] = [];
@@ -56,6 +63,14 @@ export class Compiler {
     };
   }
 
+  /**
+   * Compile a recipe and optionally persist the output.
+   *
+   * @param config - Recipe configuration to compile.
+   * @param contextPath - Path used to resolve relative links.
+   * @param dryRun - When true, skip writing output to the vault.
+   * @returns Target result containing output status and diagnostics.
+   */
   async compileAndWrite(
     config: BookerRecipeConfig,
     contextPath: string,
@@ -79,6 +94,13 @@ export class Compiler {
     };
   }
 
+  /**
+   * Compile Markdown chunks into a single output string.
+   *
+   * @param chunks - Ordered list of content chunks.
+   * @param config - Recipe configuration used for transforms.
+   * @returns Combined Markdown content.
+   */
   compileFromChunks(chunks: ContentChunk[], config: BookerRecipeConfig): string {
     const pieces = chunks.map((chunk) => {
       let content = this.context.markdownTransform.apply(chunk.content, config.options);
@@ -94,6 +116,12 @@ export class Compiler {
     return `${titlePrefix}${joined}`.trimEnd() + "\n";
   }
 
+  /**
+   * Persist content to the given vault path.
+   *
+   * @param path - Output file path.
+   * @param content - Content to write.
+   */
   async writeOutput(path: string, content: string): Promise<void> {
     const outputFile = await this.context.vaultIO.ensureOutputFile(path);
     await this.context.vaultIO.write(outputFile, content);

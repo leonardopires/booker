@@ -2,6 +2,13 @@ import { BookerOptions } from "../domain/types";
 
 const MAX_HEADING_LEVEL = 6;
 
+/**
+ * Shift Markdown heading levels by the provided offset.
+ *
+ * @param markdown - Raw Markdown content.
+ * @param offset - Heading level shift to apply.
+ * @returns Updated Markdown content.
+ */
 export const shiftHeadings = (markdown: string, offset: number): string => {
   if (offset <= 0) {
     return markdown;
@@ -43,7 +50,16 @@ export const shiftHeadings = (markdown: string, offset: number): string => {
   return shifted.join("\n");
 };
 
+/**
+ * Applies Booker-specific Markdown transformations.
+ */
 export class MarkdownTransform {
+  /**
+   * Strip a YAML frontmatter block from the start of content.
+   *
+   * @param content - Markdown content that may include frontmatter.
+   * @returns Markdown content without the frontmatter block.
+   */
   stripFrontmatter(content: string): string {
     if (!content.startsWith("---")) {
       return content;
@@ -55,6 +71,12 @@ export class MarkdownTransform {
     return content.slice(match[0].length);
   }
 
+  /**
+   * Remove the first H1 heading in the content, if present.
+   *
+   * @param content - Markdown content to adjust.
+   * @returns Updated Markdown content.
+   */
   stripFirstH1(content: string): string {
     const lines = content.split("\n");
     const h1Index = lines.findIndex((line) => line.startsWith("# "));
@@ -70,6 +92,13 @@ export class MarkdownTransform {
     return lines.join("\n");
   }
 
+  /**
+   * Apply configured content transforms such as frontmatter or H1 stripping.
+   *
+   * @param content - Markdown content to transform.
+   * @param options - Booker options controlling the transforms.
+   * @returns Updated Markdown content.
+   */
   apply(content: string, options: BookerOptions): string {
     let output = content;
     if (options.strip_frontmatter) {
@@ -89,6 +118,13 @@ export class MarkdownTransform {
     return shiftHeadings(content, offset);
   }
 
+  /**
+   * Join content chunks with the provided separator.
+   *
+   * @param chunks - Array of Markdown content chunks.
+   * @param separator - Separator string to insert between chunks.
+   * @returns Joined content string.
+   */
   joinChunks(chunks: string[], separator: string): string {
     return chunks.join(separator);
   }
