@@ -1,11 +1,13 @@
-import { TFolder } from "obsidian";
 import { FileRef, IVault } from "../ports/IAppContext";
 import { getDirname, normalizePath } from "../utils/PathUtils";
 import { UserMessagePresenter } from "./UserMessagePresenter";
 
+/**
+ * Supported template types for new Booker files.
+ */
 export type BookerTemplateKind = "recipe" | "bundle";
 
-type PromptFunction = (message: string, defaultValue?: string) => string | null;
+type PromptFunction = (message: string, defaultValue?: string) => Promise<string | null>;
 type OpenFileFunction = (file: FileRef) => void;
 
 const RECIPE_TEMPLATE = `---
@@ -44,6 +46,9 @@ This bundle combines multiple recipes or bundles.
 ℹ️ Edit the YAML above in Source mode.
 `;
 
+/**
+ * Creates Booker recipe or bundle files after prompting for a filename.
+ */
 export class BookerFileCreator {
   constructor(
     private readonly vault: IVault,
@@ -52,18 +57,41 @@ export class BookerFileCreator {
     private readonly openFile: OpenFileFunction
   ) {}
 
-  async createRecipe(target: TFolder): Promise<FileRef | null> {
+  /**
+   * Create a new recipe in the target folder or alongside the target file.
+   *
+   * @param target - Target folder or file reference.
+   * @returns The created file ref, or null if creation is canceled.
+   */
+  async createRecipe(target: FileRef): Promise<FileRef | null> {
     return this.createFromTemplate(target, "recipe");
   }
 
-  async createBundle(target: TFolder): Promise<FileRef | null> {
+  /**
+   * Create a new bundle in the target folder or alongside the target file.
+   *
+   * @param target - Target folder or file reference.
+   * @returns The created file ref, or null if creation is canceled.
+   */
+  async createBundle(target: FileRef): Promise<FileRef | null> {
     return this.createFromTemplate(target, "bundle");
   }
 
-  private async createFromTemplate(target: TFolder, kind: BookerTemplateKind): Promise<FileRef | null> {
-    const folder = target.path;
-    const name = (`New ${kind === "recipe" ? "recipe" : "bundle"}`);
-    
+  /**
+   * Prompt for a filename, validate it, and create the requested template.
+   *
+   * @param target - Target folder or file reference.
+   * @param kind - Template kind to create.
+   * @returns The created file ref, or null if creation is canceled or invalid.
+   */
+  private async createFromTemplate(target: FileRef, kind: BookerTemplateKind): Promise<FileRef | null> {
+    const folder = target.kind === "folder" ? target.path : getDirname(target.path) ?? "";
+    const defaultName = `New ${kind === "recipe" ? "recipe" : "bundle"}`;
+    const name = await this.prompt(`New ${kind === "recipe" ? "recipe" : "bundle"} filename`, defaultName);
+    if (name === null) {
+      return null;
+    }
+
     const trimmed = name.trim();
     if (!trimmed) {
       this.presenter.showWarning("Please enter a filename.");

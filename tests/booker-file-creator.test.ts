@@ -15,10 +15,11 @@ const createSpy = () => {
 const createCreator = (promptValue: string | null) => {
   const openFileSpy = createSpy();
   const vault = new FakeVault({ "Notes/Existing.md": "" });
-  const presenter = new UserMessagePresenter(new FakeNotice());
-  const prompt = () => promptValue;
+  const notice = new FakeNotice();
+  const presenter = new UserMessagePresenter(notice);
+  const prompt = async () => promptValue;
   const creator = new BookerFileCreator(vault, presenter, prompt, openFileSpy.spy);
-  return { creator, vault, openFileSpy };
+  return { creator, vault, openFileSpy, notice };
 };
 
 describe("BookerFileCreator", () => {
@@ -40,5 +41,30 @@ describe("BookerFileCreator", () => {
     expect(content).toContain("type: booker-bundle");
     expect(content).toContain("# New Bundle");
     expect(openFileSpy.calls).toEqual([[{ path: "Notes/BundleFile.md", kind: "file" }]]);
+  });
+
+  it("does nothing when the prompt is canceled", async () => {
+    const { creator, vault, openFileSpy } = createCreator(null);
+    const result = await creator.createRecipe({ path: "Notes", kind: "folder" });
+
+    expect(result).toBeNull();
+    expect(openFileSpy.calls).toEqual([]);
+    await expect(vault.read({ path: "Notes/New recipe.md", kind: "file" })).rejects.toThrow();
+  });
+
+  it("rejects blank filenames", async () => {
+    const { creator, notice } = createCreator("   ");
+    const result = await creator.createRecipe({ path: "Notes", kind: "folder" });
+
+    expect(result).toBeNull();
+    expect(notice.messages).toContain("⚠️ Please enter a filename.");
+  });
+
+  it("rejects duplicate filenames", async () => {
+    const { creator, notice } = createCreator("Existing");
+    const result = await creator.createBundle({ path: "Notes", kind: "folder" });
+
+    expect(result).toBeNull();
+    expect(notice.messages).toContain("⚠️ That file already exists. Choose a new name.");
   });
 });

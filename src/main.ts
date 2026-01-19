@@ -1,8 +1,10 @@
 import { Menu, Plugin, TAbstractFile, TFile, TFolder } from "obsidian";
+import { BookerPanelView, VIEW_TYPE_BOOKER_PANEL } from "./adapters/BookerPanelView";
+import { FilenameModal } from "./adapters/FilenameModal";
 import { ObsidianAppContext, createFileRef } from "./adapters/ObsidianAppContext";
 import { BookerFileCreator } from "./services/BookerFileCreator";
-import { BookerInspector } from "./services/BookerInspector";
 import { BuildRunner } from "./services/BuildRunner";
+import { BookerPanelModelBuilder } from "./services/BookerPanelModelBuilder";
 import { Compiler } from "./services/Compiler";
 import { FrontmatterParser } from "./services/FrontmatterParser";
 import { LinkResolver } from "./services/LinkResolver";
@@ -23,16 +25,34 @@ export default class BookerPlugin extends Plugin {
     const fileCreator = new BookerFileCreator(
       appContext.vault,
       presenter,
-      (message) => window.prompt(message),
+      (message, defaultValue) => new FilenameModal(this.app, message, defaultValue).openAndGetValue(),
       (file) => this.openFile(file.path)
     );
-    const inspector = new BookerInspector(
+    const panelModelBuilder = new BookerPanelModelBuilder(
       appContext.vault,
       appContext.metadataCache,
       parser,
-      linkResolver,
-      (file) => buildRunner.buildCurrentFile(file),
-      (path) => this.openFile(path)
+      linkResolver
+    );
+    const openOutput = (path: string): boolean => {
+      const resolved = this.app.vault.getAbstractFileByPath(path);
+      if (resolved instanceof TFile) {
+        void this.app.workspace.getLeaf(false).openFile(resolved);
+        return true;
+      }
+      return false;
+    };
+
+    this.registerView(
+      VIEW_TYPE_BOOKER_PANEL,
+      (leaf) =>
+        new BookerPanelView(
+          leaf,
+          panelModelBuilder,
+          (file) => buildRunner.buildCurrentFile(file),
+          openOutput,
+          presenter
+        )
     );
 
     this.addCommand({
@@ -42,44 +62,25 @@ export default class BookerPlugin extends Plugin {
         void this.buildCurrentFile(buildRunner, presenter);
       }
     });
+    this.addCommand({
+      id: "booker-toggle-panel",
+      name: "Booker: Toggle panel",
+      callback: () => {
+        void this.togglePanel();
+      }
+    });
 
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
         this.addBookerContextMenu(menu, file, fileCreator);
       })
     );
-    presenter.showInfo("Registering markdown processor 1");
 
-    this.registerMarkdownPostProcessor((el, ctx) => {
-      presenter.showInfo("Registering markdown processor 2");
-      const sourcePath = ctx.sourcePath || this.app.workspace.getActiveFile()?.path;
-      if (!sourcePath) {
-        presenter.showWarning("Booker: unable to retrieve current source path.");
-        return;
-      }
-      try {
-
-        const viewRoot =
-          el.closest(".markdown-source-view") ??
-          el.closest(".markdown-reading-view") ??
-          el.closest(".markdown-preview-view");
-      
-        // Reading view container (preview)
-        const previewHost = viewRoot?.querySelector(".markdown-preview-sizer");
-      
-        // Live preview container (CM6)
-        const liveHost = viewRoot?.querySelector(".cm-content");
-      
-        const host = (previewHost ?? liveHost) as HTMLElement | null;
-        if (!host) {
-          presenter.showError("Booker: Host not found");
-          return;
-        }
-        inspector.render(host, sourcePath);
-      } catch (e: any) {
-        presenter.showError(e.toString());
-      }
-    });
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", () => {
+        this.refreshPanelViews();
+      })
+    );
   }
 
   private async buildCurrentFile(
@@ -101,7 +102,7 @@ export default class BookerPlugin extends Plugin {
     file: TAbstractFile | null,
     fileCreator: BookerFileCreator
   ): void {
-    const folder = this.getTargetFolder(file);
+    const target = this.getTargetRef(file);
   
     menu.addItem((item) => {
       item.setTitle("Booker");
@@ -115,21 +116,33 @@ export default class BookerPlugin extends Plugin {
   
       m.addItem((i) => {
         i.setTitle("New recipe");
-        i.onClick(() => void fileCreator.createRecipe(folder));
+        i.onClick(() => void fileCreator.createRecipe(target));
       });
   
       m.addItem((i) => {
         i.setTitle("New bundle");
-        i.onClick(() => void fileCreator.createBundle(folder));
+        i.onClick(() => void fileCreator.createBundle(target));
       });
     });
   }
   
-  private getTargetFolder(file: TAbstractFile | null): TFolder {
-    if (!file) return this.app.vault.getRoot();
-    if (file instanceof TFolder) return file;
-    if (file instanceof TFile) return file.parent ?? this.app.vault.getRoot();
-    return this.app.vault.getRoot();
+  /**
+   * Resolve the target folder reference for context menu actions.
+   */
+  private getTargetRef(file: TAbstractFile | null): { path: string; kind: "file" | "folder" } {
+    if (!file) {
+      const root = this.app.vault.getRoot();
+      return { path: root.path, kind: "folder" };
+    }
+    if (file instanceof TFolder) {
+      return { path: file.path, kind: "folder" };
+    }
+    if (file instanceof TFile) {
+      const parent = file.parent ?? this.app.vault.getRoot();
+      return { path: parent.path, kind: "folder" };
+    }
+    const root = this.app.vault.getRoot();
+    return { path: root.path, kind: "folder" };
   }
 
   private openFile(path: string): void {
@@ -139,10 +152,37 @@ export default class BookerPlugin extends Plugin {
     }
   }
 
-  private toFileRef(file: TAbstractFile): { path: string; kind: "file" | "folder" } {
-    if (file instanceof TFolder) {
-      return { path: file.path, kind: "folder" };
+  /**
+   * Toggle the Booker panel in the right sidebar.
+   */
+  private async togglePanel(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_BOOKER_PANEL);
+    const [openLeaf] = existing;
+    if (openLeaf) {
+      this.app.workspace.revealLeaf(openLeaf);
+      return;
     }
-    return { path: file.path, kind: "file" };
+
+    const leaf = this.app.workspace.getRightLeaf(false);
+    if (!leaf) {
+      return;
+    }
+    await leaf.setViewState({ type: VIEW_TYPE_BOOKER_PANEL, active: true });
+    this.app.workspace.revealLeaf(leaf);
+    this.refreshPanelViews();
+  }
+
+  /**
+   * Refresh all open Booker panel views with the current active file.
+   */
+  private refreshPanelViews(): void {
+    const activeFile = this.app.workspace.getActiveFile();
+    const fileRef = activeFile ? createFileRef(activeFile) : null;
+    this.app.workspace.getLeavesOfType(VIEW_TYPE_BOOKER_PANEL).forEach((leaf) => {
+      const view = leaf.view;
+      if (view instanceof BookerPanelView) {
+        view.setActiveFile(fileRef);
+      }
+    });
   }
 }
