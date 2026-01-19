@@ -1,4 +1,4 @@
-import { BookerOptions } from "../domain/types";
+import { BookerOptions, HeadingEntry } from "../domain/types";
 
 const MAX_HEADING_LEVEL = 6;
 
@@ -116,6 +116,46 @@ export class MarkdownTransform {
   applyHeadingOffset(content: string, options: BookerOptions): string {
     const offset = options.heading_offset ?? 1;
     return shiftHeadings(content, offset);
+  }
+
+  /**
+   * Extract Markdown headings from content, ignoring fenced code blocks.
+   */
+  extractHeadings(content: string, sourcePath: string): HeadingEntry[] {
+    const lines = content.split("\n");
+    const headings: HeadingEntry[] = [];
+    let inFence = false;
+    let fenceMarker: string | undefined;
+
+    for (const line of lines) {
+      const fenceMatch = line.match(/^\s*(```+|~~~+)/);
+      if (fenceMatch) {
+        const marker = fenceMatch[1];
+        if (!inFence) {
+          inFence = true;
+          fenceMarker = marker;
+        } else if (fenceMarker && line.trimStart().startsWith(fenceMarker)) {
+          inFence = false;
+          fenceMarker = undefined;
+        }
+        continue;
+      }
+
+      if (inFence) {
+        continue;
+      }
+
+      const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+      if (!headingMatch) {
+        continue;
+      }
+
+      const level = headingMatch[1]?.length ?? 0;
+      const text = headingMatch[2]?.trim() ?? "";
+      headings.push({ level, text, sourcePath });
+    }
+
+    return headings;
   }
 
   /**

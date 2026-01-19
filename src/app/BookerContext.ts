@@ -8,6 +8,7 @@ import { Compiler } from "../services/Compiler";
 import { FrontmatterParser } from "../services/FrontmatterParser";
 import { LinkResolver } from "../services/LinkResolver";
 import { MarkdownTransform } from "../services/MarkdownTransform";
+import { TableOfContentsBuilder } from "../services/TableOfContentsBuilder";
 import { UserMessagePresenter } from "../services/UserMessagePresenter";
 import { VaultIO } from "../services/VaultIO";
 import { FileRef, IMetadataCache, IVault } from "../ports/IAppContext";
@@ -28,6 +29,7 @@ export class BookerContext {
   readonly linkResolver: LinkResolver;
   readonly parser: FrontmatterParser;
   readonly markdownTransform: MarkdownTransform;
+  readonly tocBuilder: TableOfContentsBuilder;
   readonly vaultIO: VaultIO;
   readonly compiler: Compiler;
   readonly buildRunner: BuildRunner;
@@ -45,11 +47,13 @@ export class BookerContext {
     this.linkResolver = new LinkResolver(this.metadataCache);
     this.parser = new FrontmatterParser(this.metadataCache);
     this.markdownTransform = new MarkdownTransform();
+    this.tocBuilder = new TableOfContentsBuilder();
     this.vaultIO = new VaultIO(this.vault);
     this.compiler = new Compiler({
       linkResolver: this.linkResolver,
       vaultIO: this.vaultIO,
-      markdownTransform: this.markdownTransform
+      markdownTransform: this.markdownTransform,
+      tocBuilder: this.tocBuilder
     });
     this.buildRunner = new BuildRunner({
       compiler: this.compiler,

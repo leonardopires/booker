@@ -8,6 +8,26 @@ export type BookerOptions = {
    * A value of 0 disables shifting.
    */
   heading_offset: number;
+  /**
+   * Whether to render a Markdown table of contents in the output.
+   */
+  toc: boolean;
+  /**
+   * Title label for the table of contents heading.
+   */
+  toc_title: string;
+  /**
+   * Scope for bundle table of contents aggregation.
+   */
+  toc_scope: "self" | "tree";
+  /**
+   * Maximum heading depth to include in the table of contents.
+   */
+  toc_depth: number;
+  /**
+   * Whether to include level-1 headings in the table of contents.
+   */
+  toc_include_h1: boolean;
 };
 
 /**
@@ -97,6 +117,7 @@ export type BookerBundleConfig = {
 
 export type CompileResult = {
   content: string;
+  headings: HeadingEntry[];
   missingLinks: string[];
   skippedSelfIncludes: string[];
   resolvedCount: number;
@@ -125,12 +146,23 @@ export type BuildResult = {
   aggregate: AggregateResult;
 };
 
+export type HeadingEntry = {
+  level: number;
+  text: string;
+  sourcePath: string;
+};
+
 export const DEFAULT_BOOKER_OPTIONS: BookerOptions = {
   strip_frontmatter: true,
   strip_h1: false,
   strip_title: false,
   separator: "\n\n---\n\n",
-  heading_offset: 1
+  heading_offset: 1,
+  toc: false,
+  toc_title: "Table of Contents",
+  toc_scope: "tree",
+  toc_depth: 4,
+  toc_include_h1: true
 };
 
 export const DEFAULT_BUILD_OPTIONS: BuildOptions = {

@@ -8,6 +8,7 @@ import {
   BuildReport,
   BuildResult,
   CompileResult,
+  HeadingEntry,
   TargetResult
 } from "../domain/types";
 import { BookerError } from "../domain/errors";
@@ -34,6 +35,7 @@ export type BuildRunnerContext = {
 type BuildArtifact = {
   artifactPath: string;
   content: string;
+  headings: HeadingEntry[];
 };
 
 type BuildOutcome = {
@@ -138,6 +140,7 @@ export class BuildRunner {
     const results: TargetResult[] = [];
     const successfulChunks: ContentChunk[] = [];
     const outputPaths: string[] = [];
+    const aggregatedHeadings: HeadingEntry[] = [];
     const summaryCounts = { success: 0, warning: 0, error: 0 };
 
     for (const target of bundleConfig.targets) {
@@ -151,9 +154,11 @@ export class BuildRunner {
       if (targetResult.artifact) {
         successfulChunks.push({
           content: targetResult.artifact.content,
-          basename: getBasename(targetResult.artifact.artifactPath)
+          basename: getBasename(targetResult.artifact.artifactPath),
+          sourcePath: targetResult.artifact.artifactPath
         });
         outputPaths.push(normalizePath(targetResult.artifact.artifactPath));
+        aggregatedHeadings.push(...targetResult.artifact.headings);
       }
 
       if (!targetResult.result.success && bundleConfig.buildOptions.stop_on_error) {
@@ -166,7 +171,8 @@ export class BuildRunner {
       outputPaths,
       successfulChunks,
       bundleConfig,
-      bundleName
+      bundleName,
+      aggregatedHeadings
     );
 
     const successes = results.filter((result) => result.success).length;
@@ -192,7 +198,8 @@ export class BuildRunner {
       artifact: aggregate
         ? {
             artifactPath: aggregate.outputPath,
-            content: aggregate.content
+            content: aggregate.content,
+            headings: aggregate.headings
           }
         : null,
       result: buildResult
@@ -359,7 +366,8 @@ export class BuildRunner {
           result,
           artifact: {
             artifactPath: config.outputPath,
-            content: compileResult.content
+            content: compileResult.content,
+            headings: compileResult.headings
           }
         }
       : { result };
@@ -370,8 +378,9 @@ export class BuildRunner {
     outputPaths: string[],
     successfulChunks: ContentChunk[],
     bundleConfig: BookerBundleConfig,
-    bundleName: string
-  ): Promise<{ outputPath: string; content: string } | null> {
+    bundleName: string,
+    aggregatedHeadings: HeadingEntry[]
+  ): Promise<{ outputPath: string; content: string; headings: HeadingEntry[] } | null> {
     if (!aggregate) {
       throw new BookerError("BUNDLE_MISSING_AGGREGATE_OUTPUT", bundleName);
     }
@@ -384,18 +393,32 @@ export class BuildRunner {
       throw new BookerError("AGGREGATE_OUTPUT_CONFLICT", "AGGREGATE_OUTPUT_CONFLICT");
     }
 
-    const aggregateContent = this.context.compiler.compileFromChunks(successfulChunks, {
-      title: aggregate.title,
-      outputPath: aggregate.outputPath,
-      order: [],
-      options: aggregate.options
-    });
+    const tocHeadingsOverride =
+      aggregate.options.toc_scope === "tree" ? aggregatedHeadings : undefined;
+    const aggregateResult = this.context.compiler.compileFromChunks(
+      successfulChunks,
+      {
+        title: aggregate.title,
+        outputPath: aggregate.outputPath,
+        order: [],
+        options: aggregate.options
+      },
+      tocHeadingsOverride
+    );
 
     if (!bundleConfig.buildOptions.dry_run) {
-      await this.context.compiler.writeOutput(aggregate.outputPath, aggregateContent);
+      await this.context.compiler.writeOutput(aggregate.outputPath, aggregateResult.content);
     }
 
-    return { outputPath: aggregate.outputPath, content: aggregateContent };
+    const bundleHeadings = aggregate.title
+      ? [{ level: 1, text: aggregate.title, sourcePath: aggregate.outputPath }, ...aggregatedHeadings]
+      : aggregatedHeadings;
+
+    return {
+      outputPath: aggregate.outputPath,
+      content: aggregateResult.content,
+      headings: bundleHeadings.length > 0 ? bundleHeadings : aggregateResult.headings
+    };
   }
 
   private async buildRecipe(
@@ -424,7 +447,11 @@ export class BuildRunner {
     }
 
     await this.context.compiler.writeOutput(config.outputPath, result.content);
-    return { artifactPath: config.outputPath, content: result.content };
+    return {
+      artifactPath: config.outputPath,
+      content: result.content,
+      headings: result.headings
+    };
   }
 
   private resolveSourceFile(source: string, fromPath: string): FileRef {
