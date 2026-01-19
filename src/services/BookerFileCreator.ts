@@ -33,8 +33,7 @@ const BUNDLE_TEMPLATE = `---
 type: booker-bundle
 title: "New Bundle"
 targets:
-  - name: Step 1
-    source: "[[]]"
+  - "[[]]"
 aggregate:
   output: "output/NEW_BUNDLE.md"
 ---
@@ -51,10 +50,12 @@ This bundle combines multiple recipes or bundles.
  */
 export class BookerFileCreator {
   constructor(
-    private readonly vault: IVault,
-    private readonly presenter: UserMessagePresenter,
-    private readonly prompt: PromptFunction,
-    private readonly openFile: OpenFileFunction
+    private readonly context: {
+      vault: IVault;
+      presenter: UserMessagePresenter;
+      prompt: PromptFunction;
+      openFile: OpenFileFunction;
+    }
   ) {}
 
   /**
@@ -87,28 +88,31 @@ export class BookerFileCreator {
   private async createFromTemplate(target: FileRef, kind: BookerTemplateKind): Promise<FileRef | null> {
     const folder = target.kind === "folder" ? target.path : getDirname(target.path) ?? "";
     const defaultName = `New ${kind === "recipe" ? "recipe" : "bundle"}`;
-    const name = await this.prompt(`New ${kind === "recipe" ? "recipe" : "bundle"} filename`, defaultName);
+    const name = await this.context.prompt(
+      `New ${kind === "recipe" ? "recipe" : "bundle"} filename`,
+      defaultName
+    );
     if (name === null) {
       return null;
     }
 
     const trimmed = name.trim();
     if (!trimmed) {
-      this.presenter.showWarning("Please enter a filename.");
+      this.context.presenter.showWarning("Please enter a filename.");
       return null;
     }
 
     const filename = trimmed.endsWith(".md") ? trimmed : `${trimmed}.md`;
     const path = normalizePath(folder ? `${folder}/${filename}` : filename);
-    const existing = this.vault.getFileByPath(path);
+    const existing = this.context.vault.getFileByPath(path);
     if (existing) {
-      this.presenter.showWarning("That file already exists. Choose a new name.");
+      this.context.presenter.showWarning("That file already exists. Choose a new name.");
       return null;
     }
 
     const content = kind === "recipe" ? RECIPE_TEMPLATE : BUNDLE_TEMPLATE;
-    const created = await this.vault.create(path, content);
-    this.openFile(created);
+    const created = await this.context.vault.create(path, content);
+    this.context.openFile(created);
     return created;
   }
 }

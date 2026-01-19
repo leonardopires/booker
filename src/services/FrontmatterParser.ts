@@ -4,18 +4,18 @@ import {
   BookerBundleFrontmatter,
   BookerRecipeConfig,
   BookerRecipeFrontmatter,
-  BundleTargetFrontmatter,
-  BundleTargetInlinePlan,
-  BundleTargetPlan,
-  BundleTargetSourcePlan,
   DEFAULT_BOOKER_OPTIONS,
-  DEFAULT_BUILD_OPTIONS,
-  TargetMode
+  DEFAULT_BUILD_OPTIONS
 } from "../domain/types";
 import { BookerError } from "../domain/errors";
 import { FileRef, IMetadataCache } from "../ports/IAppContext";
 import { getDirname, normalizePath } from "../utils/PathUtils";
 
+type NormalizedType = "booker-recipe" | "booker-bundle";
+
+/**
+ * Parses Booker frontmatter into normalized configuration objects.
+ */
 export class FrontmatterParser {
   constructor(private readonly metadataCache: IMetadataCache) {}
 
@@ -24,7 +24,10 @@ export class FrontmatterParser {
     return (cache?.frontmatter ?? null) as Record<string, unknown> | null;
   }
 
-  normalizeType(rawType: unknown): { normalized?: "booker-recipe" | "booker-bundle"; deprecated: boolean } {
+  /**
+   * Normalize Booker frontmatter types and mark deprecated aliases.
+   */
+  normalizeType(rawType: unknown): { normalized?: NormalizedType; deprecated: boolean } {
     if (typeof rawType !== "string") {
       return { deprecated: false };
     }
@@ -43,6 +46,9 @@ export class FrontmatterParser {
     return { deprecated: false };
   }
 
+  /**
+   * Parse a Booker recipe configuration from frontmatter.
+   */
   parseRecipeConfig(frontmatter: BookerRecipeFrontmatter, file: FileRef): BookerRecipeConfig {
     if (!frontmatter.output) {
       throw new BookerError("MISSING_OUTPUT", "MISSING_OUTPUT");
@@ -68,12 +74,15 @@ export class FrontmatterParser {
     };
   }
 
+  /**
+   * Parse a Booker bundle configuration from frontmatter.
+   */
   parseBundleConfig(frontmatter: BookerBundleFrontmatter, file: FileRef): BookerBundleConfig {
     if (!frontmatter.targets || !Array.isArray(frontmatter.targets) || frontmatter.targets.length === 0) {
       throw new BookerError("MISSING_TARGETS", "MISSING_TARGETS");
     }
 
-    const targets = frontmatter.targets.map((target, index) => this.parseTarget(file, target, index));
+    const targets = this.parseBundleTargets(frontmatter.targets);
 
     return {
       targets,
@@ -85,6 +94,9 @@ export class FrontmatterParser {
     };
   }
 
+  /**
+   * Resolve bundle/recipe output paths relative to the active file.
+   */
   resolveOutputPath(output: string, activePath: string): string {
     const trimmed = output.trim();
     if (trimmed.startsWith("~")) {
@@ -100,6 +112,9 @@ export class FrontmatterParser {
     return normalizePath(`${dir}/${trimmed}`);
   }
 
+  /**
+   * Normalize and filter a recipe order list.
+   */
   normalizeOrder(order?: string[]): string[] {
     if (!order || !Array.isArray(order)) {
       return [];
@@ -107,9 +122,10 @@ export class FrontmatterParser {
     return order.filter((item): item is string => typeof item === "string");
   }
 
-  private normalizeAggregateConfig(aggregate: BookerBundleFrontmatter["aggregate"], file: FileRef):
-    | AggregateConfig
-    | undefined {
+  private normalizeAggregateConfig(
+    aggregate: BookerBundleFrontmatter["aggregate"],
+    file: FileRef
+  ): AggregateConfig | undefined {
     if (!aggregate) {
       return undefined;
     }
@@ -128,64 +144,22 @@ export class FrontmatterParser {
     };
   }
 
-  private parseTarget(file: FileRef, target: BundleTargetFrontmatter, index: number): BundleTargetPlan {
-    if (!target || typeof target !== "object") {
-      throw new BookerError("MISSING_TARGET_DEFINITION", "MISSING_TARGET_DEFINITION");
+  private parseBundleTargets(targets: BookerBundleFrontmatter["targets"]): string[] {
+    if (!targets) {
+      return [];
     }
 
-    const name = target.name?.trim() || `Target ${index + 1}`;
-    const source = target.source ?? target.project;
-    const mode = target.mode ?? "auto";
-
-    if (source) {
-      const plan: BundleTargetSourcePlan = {
-        name,
-        source,
-        mode: this.normalizeMode(mode),
-        overrides: target.overrides,
-        title: target.title
-      };
-      return plan;
+    const invalid = targets.some((target) => typeof target !== "string");
+    if (invalid) {
+      throw new BookerError("DEPRECATED_BUNDLE_SCHEMA", "DEPRECATED_BUNDLE_SCHEMA");
     }
 
-    if (target.output) {
-      if (!target.order || !Array.isArray(target.order) || target.order.length === 0) {
-        throw new BookerError("MISSING_ORDER", "MISSING_ORDER");
-      }
-
-      const order = this.normalizeOrder(target.order);
-      if (order.length === 0) {
-        throw new BookerError("MISSING_ORDER", "MISSING_ORDER");
-      }
-
-      const inlineConfig: BookerRecipeConfig = {
-        title: target.title,
-        outputPath: this.resolveOutputPath(target.output, file.path),
-        order,
-        options: {
-          ...DEFAULT_BOOKER_OPTIONS,
-          ...(target.options ?? {})
-        }
-      };
-
-      const inlinePlan: BundleTargetInlinePlan = {
-        name,
-        inlineConfig
-      };
-      return inlinePlan;
+    const normalized = targets
+      .map((target) => target.trim())
+      .filter((target) => target.length > 0);
+    if (normalized.length === 0) {
+      throw new BookerError("MISSING_TARGETS", "MISSING_TARGETS");
     }
-
-    if (target.order) {
-      throw new BookerError("MISSING_OUTPUT", "MISSING_OUTPUT");
-    }
-
-    throw new BookerError("MISSING_TARGET_DEFINITION", "MISSING_TARGET_DEFINITION");
-  }
-
-  private normalizeMode(mode: string): TargetMode {
-    if (mode === "recipe" || mode === "bundle" || mode === "auto") {
-      return mode;
-    }
-    return "auto";
+    return normalized;
   }
 }

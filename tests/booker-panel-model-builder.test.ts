@@ -19,7 +19,12 @@ describe("BookerPanelModelBuilder", () => {
 
     const parser = new FrontmatterParser(appContext.metadataCache);
     const resolver = new LinkResolver(appContext.metadataCache);
-    const builder = new BookerPanelModelBuilder(appContext.vault, appContext.metadataCache, parser, resolver);
+    const builder = new BookerPanelModelBuilder({
+      vault: appContext.vault,
+      metadataCache: appContext.metadataCache,
+      parser,
+      linkResolver: resolver
+    });
     const model = builder.build({ path: "Recipes/Recipe.md", kind: "file" });
 
     expect(model.state).toBe("booker");
@@ -41,23 +46,25 @@ describe("BookerPanelModelBuilder", () => {
     }
   });
 
-  it("builds a bundle model with inline targets", () => {
+  it("builds a bundle model with link targets", () => {
     const appContext = new FakeAppContext({
       "Bundles/Bundle.md": "",
       "Recipes/One.md": ""
     });
     appContext.metadataCache.setFrontmatter("Bundles/Bundle.md", {
       type: "booker-bundle",
-      targets: [
-        { name: "First", source: "Recipes/One" },
-        { name: "Inline", order: ["Recipes/One", "Recipes/Missing"] }
-      ],
+      targets: ["Recipes/One", "Recipes/Missing"],
       aggregate: { output: "output/all.md" }
     });
 
     const parser = new FrontmatterParser(appContext.metadataCache);
     const resolver = new LinkResolver(appContext.metadataCache);
-    const builder = new BookerPanelModelBuilder(appContext.vault, appContext.metadataCache, parser, resolver);
+    const builder = new BookerPanelModelBuilder({
+      vault: appContext.vault,
+      metadataCache: appContext.metadataCache,
+      parser,
+      linkResolver: resolver
+    });
     const model = builder.build({ path: "Bundles/Bundle.md", kind: "file" });
 
     expect(model.state).toBe("booker");
@@ -69,7 +76,7 @@ describe("BookerPanelModelBuilder", () => {
       const second = model.items[1];
       expect(second).toBeDefined();
       if (second) {
-        expect(second.label).toBe("Inline (inline)");
+        expect(second.label).toBe("Recipes/Missing");
         expect(second.resolved).toBe(false);
       }
     }
@@ -81,7 +88,12 @@ describe("BookerPanelModelBuilder", () => {
 
     const parser = new FrontmatterParser(appContext.metadataCache);
     const resolver = new LinkResolver(appContext.metadataCache);
-    const builder = new BookerPanelModelBuilder(appContext.vault, appContext.metadataCache, parser, resolver);
+    const builder = new BookerPanelModelBuilder({
+      vault: appContext.vault,
+      metadataCache: appContext.metadataCache,
+      parser,
+      linkResolver: resolver
+    });
     const model = builder.build({ path: "Notes/Note.md", kind: "file" });
 
     expect(model.state).toBe("not-booker");
@@ -91,7 +103,12 @@ describe("BookerPanelModelBuilder", () => {
     const appContext = new FakeAppContext();
     const parser = new FrontmatterParser(appContext.metadataCache);
     const resolver = new LinkResolver(appContext.metadataCache);
-    const builder = new BookerPanelModelBuilder(appContext.vault, appContext.metadataCache, parser, resolver);
+    const builder = new BookerPanelModelBuilder({
+      vault: appContext.vault,
+      metadataCache: appContext.metadataCache,
+      parser,
+      linkResolver: resolver
+    });
     const model = builder.build(null);
 
     expect(model.state).toBe("empty");

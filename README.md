@@ -28,25 +28,14 @@ options:
 By default, Booker prefixes each compiled note with an H1 matching the file name.
 Set `strip_title: true` to skip adding the filename title.
 
-## Example bundle note (mixed targets + aggregate)
+## Example bundle note (targets + aggregate)
 
 ```yaml
 ---
 type: booker-bundle
 targets:
-  - name: "Ato I"
-    source: "[[Ato I - Recipe]]"
-    mode: recipe
-  - name: "Ato II (inline)"
-    title: "Ato II — Travessia"
-    output: "Longinus/Livro 1/Ato II - Compilado.md"
-    order:
-      - "[[L1-A2-C001]]"
-      - "[[L1-A2-C002]]"
-    options:
-      strip_frontmatter: true
-      strip_h1: true
-      separator: "\n\n---\n\n"
+  - "[[Ato I - Recipe]]"
+  - "[[Ato II - Recipe]]"
 aggregate:
   title: "Longinus — Livro 1"
   output: "Longinus/Livro 1/Livro 1 - Compilado.md"
@@ -62,7 +51,9 @@ build_options:
 ---
 ```
 
-Targets can be inline or reference a `type: booker-recipe` or `type: booker-bundle` note using `source`. Aggregation concatenates successful target outputs in order, using the aggregate options.
+Bundle targets are an ordered list of wikilinks or paths to `booker-recipe` or `booker-bundle` notes. Aggregation concatenates successful target outputs in order, using the aggregate options.
+
+Inline bundle targets and per-target overrides are deprecated. Update any older bundle YAML to the simple `targets:` list before generating.
 
 ## Backward-compatible types
 
@@ -78,19 +69,6 @@ Run the command in the Command Palette:
 ```
 Booker: Build current file
 ```
-
-## Source + mode
-
-Bundle targets use a single `source` field and optional `mode`:
-
-```yaml
-targets:
-  - name: "Livro 1"
-    source: "[[Livro 1]]"
-    mode: auto # auto | recipe | bundle
-```
-
-`auto` infers the type from the referenced note, while `recipe` or `bundle` forces the behavior.
 
 ## Notes on link resolution
 

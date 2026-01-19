@@ -1,7 +1,18 @@
-import { BookerBundleFrontmatter, BookerRecipeFrontmatter, BundleTargetFrontmatter } from "../domain/types";
-import { FileRef, IMetadataCache, IVault } from "../ports/IAppContext";
+import { BookerBundleFrontmatter, BookerRecipeFrontmatter } from "../domain/types";
+import { FileRef } from "../ports/IAppContext";
 import { FrontmatterParser } from "./FrontmatterParser";
 import { LinkResolver } from "./LinkResolver";
+import { IVault, IMetadataCache } from "../ports/IAppContext";
+
+/**
+ * Shared BookerContext shape for panel model dependencies.
+ */
+export type BookerPanelModelContext = {
+  vault: IVault;
+  metadataCache: IMetadataCache;
+  parser: FrontmatterParser;
+  linkResolver: LinkResolver;
+};
 
 /**
  * Represents a single source/step entry rendered in the Booker panel list.
@@ -34,12 +45,7 @@ export type BookerPanelViewModel =
  * Builds a Booker panel view model for the active file without touching the DOM.
  */
 export class BookerPanelModelBuilder {
-  constructor(
-    private readonly vault: IVault,
-    private readonly metadataCache: IMetadataCache,
-    private readonly parser: FrontmatterParser,
-    private readonly linkResolver: LinkResolver
-  ) {}
+  constructor(private readonly context: BookerPanelModelContext) {}
 
   /**
    * Build the panel view model for the provided file.
@@ -52,7 +58,7 @@ export class BookerPanelModelBuilder {
       return { state: "empty" };
     }
 
-    const frontmatter = this.parser.getFrontmatter(file) as
+    const frontmatter = this.context.parser.getFrontmatter(file) as
       | BookerRecipeFrontmatter
       | BookerBundleFrontmatter
       | null;
@@ -60,14 +66,16 @@ export class BookerPanelModelBuilder {
       return { state: "not-booker", path: file.path };
     }
 
-    const typeInfo = this.parser.normalizeType(frontmatter.type);
+    const typeInfo = this.context.parser.normalizeType(frontmatter.type);
     if (!typeInfo.normalized) {
       return { state: "not-booker", path: file.path };
     }
 
     const kind = typeInfo.normalized === "booker-recipe" ? "recipe" : "bundle";
     const outputPath = this.getOutputPath(frontmatter, file.path, typeInfo.normalized);
-    const outputExists = outputPath ? this.vault.getFileByPath(outputPath)?.kind === "file" : false;
+    const outputExists = outputPath
+      ? this.context.vault.getFileByPath(outputPath)?.kind === "file"
+      : false;
     const { targets, missingCount } = this.getTargets(frontmatter, file.path, typeInfo.normalized);
     const summaryLabel = kind === "recipe" ? "Sources" : "Steps";
     const actionLabel = kind === "recipe" ? "📘 Generate recipe" : "📚 Generate bundle";
@@ -103,14 +111,14 @@ export class BookerPanelModelBuilder {
       if (!recipeFrontmatter.output) {
         return null;
       }
-      return this.parser.resolveOutputPath(recipeFrontmatter.output, sourcePath);
+      return this.context.parser.resolveOutputPath(recipeFrontmatter.output, sourcePath);
     }
     const bundleFrontmatter = frontmatter as BookerBundleFrontmatter;
     const aggregateOutput = bundleFrontmatter.aggregate?.output;
     if (!aggregateOutput) {
       return null;
     }
-    return this.parser.resolveOutputPath(aggregateOutput, sourcePath);
+    return this.context.parser.resolveOutputPath(aggregateOutput, sourcePath);
   }
 
   /**
@@ -123,7 +131,7 @@ export class BookerPanelModelBuilder {
   ): { targets: BookerPanelItem[]; missingCount: number } {
     if (type === "booker-recipe") {
       const recipeFrontmatter = frontmatter as BookerRecipeFrontmatter;
-      const order = this.parser.normalizeOrder(recipeFrontmatter.order ?? []);
+      const order = this.context.parser.normalizeOrder(recipeFrontmatter.order ?? []);
       const targets = order.map((item) => {
         const resolved = this.resolveLink(item, sourcePath);
         return { label: this.formatLinkLabel(item), resolved };
@@ -133,9 +141,13 @@ export class BookerPanelModelBuilder {
     }
 
     const bundleFrontmatter = frontmatter as BookerBundleFrontmatter;
-    const targets = (bundleFrontmatter.targets ?? []).map(
-      (target: BundleTargetFrontmatter, index: number) => this.getBundleTarget(target, index, sourcePath)
-    );
+    const rawTargets = Array.isArray(bundleFrontmatter.targets) ? bundleFrontmatter.targets : [];
+    const targets = rawTargets.map((target, index) => {
+      if (typeof target !== "string") {
+        return { label: `Target ${index + 1}`, resolved: false };
+      }
+      return this.getBundleTarget(target, sourcePath);
+    });
     const missingCount = targets.filter((target) => !target.resolved).length;
     return { targets, missingCount };
   }
@@ -143,35 +155,17 @@ export class BookerPanelModelBuilder {
   /**
    * Build a list entry for a bundle target.
    */
-  private getBundleTarget(
-    target: BundleTargetFrontmatter | null | undefined,
-    index: number,
-    sourcePath: string
-  ): BookerPanelItem {
-    if (!target || typeof target !== "object") {
-      return { label: `Target ${index + 1}`, resolved: false };
-    }
-
-    const name = target.name?.trim() || `Target ${index + 1}`;
-    const source = target.source ?? target.project;
-    if (source) {
-      return {
-        label: `${name}: ${this.formatLinkLabel(source)}`,
-        resolved: this.resolveLink(source, sourcePath)
-      };
-    }
-
-    const order = this.parser.normalizeOrder(target.order ?? []);
-    const hasMissing = order.some((item) => !this.resolveLink(item, sourcePath));
-    const label = `${name} (inline)`;
-    return { label, resolved: order.length > 0 && !hasMissing };
+  private getBundleTarget(target: string, sourcePath: string): BookerPanelItem {
+    const label = this.formatLinkLabel(target);
+    const resolved = this.resolveLink(target, sourcePath);
+    return { label, resolved };
   }
 
   /**
    * Normalize a link label for display.
    */
   private formatLinkLabel(raw: string): string {
-    const normalized = this.linkResolver.normalizeLinkString(raw);
+    const normalized = this.context.linkResolver.normalizeLinkString(raw);
     return normalized || raw.trim();
   }
 
@@ -179,10 +173,10 @@ export class BookerPanelModelBuilder {
    * Resolve a link and return whether it exists.
    */
   private resolveLink(raw: string, sourcePath: string): boolean {
-    const normalized = this.linkResolver.normalizeLinkString(raw);
+    const normalized = this.context.linkResolver.normalizeLinkString(raw);
     if (!normalized) {
       return false;
     }
-    return this.metadataCache.getFirstLinkpathDest(normalized, sourcePath) !== null;
+    return this.context.metadataCache.getFirstLinkpathDest(normalized, sourcePath) !== null;
   }
 }

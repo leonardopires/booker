@@ -4,12 +4,8 @@ import {
   BookerBundleFrontmatter,
   BookerRecipeConfig,
   BookerRecipeFrontmatter,
-  BundleTargetInlinePlan,
-  BundleTargetPlan,
-  BundleTargetSourcePlan,
   BuildResult,
   CompileResult,
-  TargetMode,
   TargetResult
 } from "../domain/types";
 import { BookerError } from "../domain/errors";
@@ -19,6 +15,16 @@ import { Compiler, ContentChunk } from "./Compiler";
 import { FrontmatterParser } from "./FrontmatterParser";
 import { LinkResolver } from "./LinkResolver";
 import { UserMessagePresenter } from "./UserMessagePresenter";
+
+/**
+ * Shared BookerContext shape for BuildRunner dependencies.
+ */
+export type BuildRunnerContext = {
+  compiler: Compiler;
+  parser: FrontmatterParser;
+  linkResolver: LinkResolver;
+  presenter: UserMessagePresenter;
+};
 
 type BuildArtifact = {
   artifactPath: string;
@@ -30,22 +36,22 @@ type BuildOutcome = {
   result?: BuildResult;
 };
 
+/**
+ * Runs Booker generation for recipes and bundles, producing outputs and summaries.
+ */
 export class BuildRunner {
   constructor(
-    private readonly compiler: Compiler,
-    private readonly parser: FrontmatterParser,
-    private readonly linkResolver: LinkResolver,
-    private readonly presenter: UserMessagePresenter
+    private readonly context: BuildRunnerContext
   ) {}
 
   async buildCurrentFile(file: FileRef, callStack: string[] = []): Promise<BuildOutcome> {
-    const frontmatter = this.parser.getFrontmatter(file) as BookerRecipeFrontmatter | null;
+    const frontmatter = this.context.parser.getFrontmatter(file) as BookerRecipeFrontmatter | null;
     if (!frontmatter) {
       this.handleError(new BookerError("INVALID_TYPE", "INVALID_TYPE"));
       return {};
     }
 
-    const typeInfo = this.parser.normalizeType(frontmatter.type);
+    const typeInfo = this.context.parser.normalizeType(frontmatter.type);
     if (!typeInfo.normalized) {
       this.handleError(new BookerError("INVALID_TYPE", "INVALID_TYPE"));
       return {};
@@ -55,9 +61,9 @@ export class BuildRunner {
 
     try {
       if (typeInfo.normalized === "booker-recipe") {
-        const artifact = await this.buildRecipe(file, frontmatter, undefined);
+        const artifact = await this.buildRecipe(file, frontmatter);
         if (artifact) {
-          this.presenter.showSuccess("Generation completed successfully.");
+          this.context.presenter.showSuccess("Generation completed successfully.");
           return { artifactPath: artifact.artifactPath };
         }
         return {};
@@ -65,7 +71,7 @@ export class BuildRunner {
 
       const bundleOutcome = await this.buildBundle(file, callStack);
       if (bundleOutcome.artifact) {
-        this.presenter.showSuccess("Generation completed successfully.");
+        this.context.presenter.showSuccess("Generation completed successfully.");
         return { artifactPath: bundleOutcome.artifact.artifactPath, result: bundleOutcome.result };
       }
       return { result: bundleOutcome.result };
@@ -84,19 +90,19 @@ export class BuildRunner {
       throw this.createCycleError([...callStack, normalizedPath]);
     }
 
-    const frontmatter = this.parser.getFrontmatter(file) as BookerRecipeFrontmatter | null;
+    const frontmatter = this.context.parser.getFrontmatter(file) as BookerRecipeFrontmatter | null;
     if (!frontmatter) {
       throw new BookerError("INVALID_TYPE", "INVALID_TYPE");
     }
 
-    const typeInfo = this.parser.normalizeType(frontmatter.type);
+    const typeInfo = this.context.parser.normalizeType(frontmatter.type);
     if (typeInfo.normalized !== "booker-bundle") {
       throw new BookerError("INVALID_TYPE", "INVALID_TYPE");
     }
 
     this.warnIfDeprecated(file.path, frontmatter.type, typeInfo.deprecated);
 
-    const bundleConfig = this.parser.parseBundleConfig(frontmatter as BookerBundleFrontmatter, file);
+    const bundleConfig = this.context.parser.parseBundleConfig(frontmatter as BookerBundleFrontmatter, file);
     const bundleName = getBasename(file.path);
     if (!bundleConfig.aggregate?.outputPath) {
       throw new BookerError("BUNDLE_MISSING_AGGREGATE_OUTPUT", bundleName);
@@ -107,8 +113,8 @@ export class BuildRunner {
     const successfulChunks: ContentChunk[] = [];
     const outputPaths: string[] = [];
 
-    for (const targetPlan of bundleConfig.targets) {
-      const targetResult = await this.buildBundleTarget(targetPlan, file, stack, bundleConfig.buildOptions);
+    for (const target of bundleConfig.targets) {
+      const targetResult = await this.buildBundleTarget(target, file, stack, bundleConfig.buildOptions);
       results.push(targetResult.result);
       if (targetResult.artifact) {
         successfulChunks.push({
@@ -159,49 +165,39 @@ export class BuildRunner {
   }
 
   private async buildBundleTarget(
-    targetPlan: BundleTargetPlan,
+    target: string,
     bundleFile: FileRef,
     callStack: string[],
     buildOptions: BookerBundleConfig["buildOptions"]
   ): Promise<{ result: TargetResult; artifact?: BuildArtifact }> {
-    if (this.isInlineTarget(targetPlan)) {
-      const compileResult = await this.compiler.compile(targetPlan.inlineConfig, bundleFile.path);
-      const targetResult = this.createTargetResult(targetPlan.name, targetPlan.inlineConfig.outputPath, compileResult);
+    const resolved = this.resolveSourceFile(target, bundleFile.path);
+    const targetName = getBasename(resolved.path);
 
-      return this.handleCompileResult(
-        targetPlan.inlineConfig,
-        compileResult,
-        buildOptions,
-        targetResult
-      );
-    }
-
-    const resolved = this.resolveSourceFile(targetPlan.source, bundleFile.path);
-    const mode = targetPlan.mode;
-    const targetName = targetPlan.name;
-
-    const sourceFrontmatter = this.parser.getFrontmatter(resolved) as BookerRecipeFrontmatter | null;
+    const sourceFrontmatter = this.context.parser.getFrontmatter(resolved) as BookerRecipeFrontmatter | null;
     if (!sourceFrontmatter) {
       throw new BookerError("INVALID_TYPE", "INVALID_TYPE");
     }
 
-    const typeInfo = this.parser.normalizeType(sourceFrontmatter.type);
+    const typeInfo = this.context.parser.normalizeType(sourceFrontmatter.type);
     if (!typeInfo.normalized) {
       throw new BookerError("INVALID_TYPE", "INVALID_TYPE");
     }
 
     this.warnIfDeprecated(resolved.path, sourceFrontmatter.type, typeInfo.deprecated);
 
-    const resolvedType = this.resolveTargetMode(mode, typeInfo.normalized);
-    if (resolvedType === "booker-recipe") {
-      const recipeConfig = this.applyOverrides(
-        this.parser.parseRecipeConfig(sourceFrontmatter as BookerRecipeFrontmatter, resolved),
-        targetPlan,
-        bundleFile
+    if (typeInfo.normalized === "booker-recipe") {
+      const recipeConfig = this.context.parser.parseRecipeConfig(
+        sourceFrontmatter as BookerRecipeFrontmatter,
+        resolved
       );
-      const compileResult = await this.compiler.compile(recipeConfig, resolved.path);
+      const compileResult = await this.context.compiler.compile(recipeConfig, resolved.path);
       const targetResult = this.createTargetResult(targetName, recipeConfig.outputPath, compileResult);
-      return this.handleCompileResult(recipeConfig, compileResult, buildOptions, targetResult);
+      return this.handleCompileResult(
+        recipeConfig,
+        compileResult,
+        buildOptions,
+        targetResult
+      );
     }
 
     const bundleOutcome = await this.buildBundle(resolved, callStack);
@@ -242,7 +238,7 @@ export class BuildRunner {
 
     if (compileResult.skippedSelfIncludes.length > 0) {
       console.warn(`Booker: Skipped self-inclusion for ${config.outputPath}:`, compileResult.skippedSelfIncludes);
-      this.presenter.showWarning(
+      this.context.presenter.showWarning(
         "I skipped one step to avoid a loop.\nA file tried to include its own output."
       );
     }
@@ -258,7 +254,7 @@ export class BuildRunner {
     };
 
     if (success && !buildOptions.dry_run) {
-      await this.compiler.writeOutput(config.outputPath, compileResult.content);
+      await this.context.compiler.writeOutput(config.outputPath, compileResult.content);
     }
 
     return success
@@ -291,7 +287,7 @@ export class BuildRunner {
       throw new BookerError("AGGREGATE_OUTPUT_CONFLICT", "AGGREGATE_OUTPUT_CONFLICT");
     }
 
-    const aggregateContent = this.compiler.compileFromChunks(successfulChunks, {
+    const aggregateContent = this.context.compiler.compileFromChunks(successfulChunks, {
       title: aggregate.title,
       outputPath: aggregate.outputPath,
       order: [],
@@ -299,21 +295,18 @@ export class BuildRunner {
     });
 
     if (!bundleConfig.buildOptions.dry_run) {
-      await this.compiler.writeOutput(aggregate.outputPath, aggregateContent);
+      await this.context.compiler.writeOutput(aggregate.outputPath, aggregateContent);
     }
 
     return { outputPath: aggregate.outputPath, content: aggregateContent };
   }
 
-  private buildRecipe(file: FileRef, frontmatter: BookerRecipeFrontmatter, mode?: TargetMode): Promise<BuildArtifact | null> {
-    if (mode === "bundle") {
-      throw new BookerError("MODE_MISMATCH", "MODE_MISMATCH");
-    }
-    const config = this.parser.parseRecipeConfig(frontmatter, file);
-    return this.compiler.compile(config, file.path).then(async (result) => {
+  private buildRecipe(file: FileRef, frontmatter: BookerRecipeFrontmatter): Promise<BuildArtifact | null> {
+    const config = this.context.parser.parseRecipeConfig(frontmatter, file);
+    return this.context.compiler.compile(config, file.path).then(async (result) => {
       if (result.skippedSelfIncludes.length > 0) {
         console.warn(`Booker: Skipped self-inclusion for ${file.path}:`, result.skippedSelfIncludes);
-        this.presenter.showWarning(
+        this.context.presenter.showWarning(
           "I skipped one step to avoid a loop.\nA file tried to include its own output."
         );
       }
@@ -326,65 +319,18 @@ export class BuildRunner {
         return null;
       }
 
-      await this.compiler.writeOutput(config.outputPath, result.content);
+      await this.context.compiler.writeOutput(config.outputPath, result.content);
       return { artifactPath: config.outputPath, content: result.content };
     });
   }
 
   private resolveSourceFile(source: string, fromPath: string): FileRef {
-    const linkpath = this.linkResolver.normalizeLinkString(source);
-    const resolved = this.linkResolver.resolveToFile(linkpath, fromPath);
+    const linkpath = this.context.linkResolver.normalizeLinkString(source);
+    const resolved = this.context.linkResolver.resolveToFile(linkpath, fromPath);
     if (!resolved) {
       throw new BookerError("SOURCE_NOT_FOUND", linkpath);
     }
     return resolved;
-  }
-
-  private resolveTargetMode(mode: TargetMode, normalizedType: "booker-recipe" | "booker-bundle"): "booker-recipe" | "booker-bundle" {
-    if (mode === "auto") {
-      return normalizedType;
-    }
-    if (mode === "recipe") {
-      if (normalizedType === "booker-bundle") {
-        throw new BookerError("MODE_MISMATCH", "recipe");
-      }
-      return "booker-recipe";
-    }
-    if (mode === "bundle") {
-      if (normalizedType === "booker-recipe") {
-        throw new BookerError("MODE_MISMATCH", "bundle");
-      }
-      return "booker-bundle";
-    }
-    return normalizedType;
-  }
-
-  private applyOverrides(
-    config: BookerRecipeConfig,
-    targetPlan: BundleTargetSourcePlan,
-    bundleFile: FileRef
-  ): BookerRecipeConfig {
-    const overrides = targetPlan.overrides ?? {};
-    const orderOverride = overrides.order ? this.parser.normalizeOrder(overrides.order) : undefined;
-    if (overrides.order && (!orderOverride || orderOverride.length === 0)) {
-      throw new BookerError("MISSING_ORDER", "MISSING_ORDER");
-    }
-
-    const outputOverride = overrides.output;
-    const outputPath = outputOverride
-      ? this.parser.resolveOutputPath(outputOverride, bundleFile.path)
-      : config.outputPath;
-
-    return {
-      ...config,
-      title: overrides.title ?? targetPlan.title ?? config.title,
-      outputPath,
-      order: orderOverride ?? config.order,
-      options: {
-        ...config.options,
-        ...(overrides.options ?? {})
-      }
-    };
   }
 
   private createTargetResult(name: string, outputPath: string, compileResult: CompileResult): TargetResult {
@@ -398,16 +344,12 @@ export class BuildRunner {
     };
   }
 
-  private isInlineTarget(target: BundleTargetPlan): target is BundleTargetInlinePlan {
-    return (target as BundleTargetInlinePlan).inlineConfig !== undefined;
-  }
-
   private warnIfDeprecated(path: string, rawType: unknown, deprecated: boolean): void {
     if (!deprecated) {
       return;
     }
     const message = "This note uses a deprecated Booker type. Update to `type: booker-recipe` or `type: booker-bundle`.";
-    this.presenter.showWarning(message);
+    this.context.presenter.showWarning(message);
     console.warn(`Booker: Deprecated type "${String(rawType)}" in ${path}.`);
   }
 
@@ -419,10 +361,10 @@ export class BuildRunner {
   private handleError(error: unknown): void {
     const { message, severity } = this.formatUserMessage(error);
     if (severity === "warning") {
-      this.presenter.showWarning(message);
+      this.context.presenter.showWarning(message);
       return;
     }
-    this.presenter.showError(message);
+    this.context.presenter.showError(message);
   }
 
   private formatUserMessage(error: unknown): { message: string; severity: "error" | "warning" } {
@@ -434,6 +376,12 @@ export class BuildRunner {
               "This note isn’t a Booker recipe or bundle.\nAdd `type: booker-recipe` or `type: booker-bundle` at the top.",
             severity: "error"
           };
+        case "DEPRECATED_BUNDLE_SCHEMA":
+          return {
+            message:
+              "This bundle uses the deprecated target schema.\nUpdate `targets` to a simple list of wikilinks or paths, then generate again.",
+            severity: "warning"
+          };
         case "MISSING_OUTPUT":
           return {
             message: "This recipe has no output file.\nAdd `output: \"path/to/file.md\"` to the YAML.",
@@ -444,26 +392,14 @@ export class BuildRunner {
             message: "This recipe has no sources yet.\nAdd an `order:` list with note links.",
             severity: "error"
           };
-        case "MISSING_TARGET_DEFINITION":
+        case "MISSING_TARGETS":
           return {
-            message:
-              "One step in this bundle is incomplete.\nEach target needs either `source:` or an inline `output` + `order`.",
+            message: "This bundle has no targets yet.\nAdd a `targets:` list with note links.",
             severity: "error"
           };
         case "SOURCE_NOT_FOUND":
           return {
             message: `I couldn’t find the note ‘${error.message}’.\nCheck the name or create the note.`,
-            severity: "error"
-          };
-        case "MODE_MISMATCH":
-          if (error.message === "bundle") {
-            return {
-              message: "This step is set to bundle, but the source is a recipe.\nChange `mode` or remove it.",
-              severity: "error"
-            };
-          }
-          return {
-            message: "This step is set to recipe, but the source is a bundle.\nChange `mode` or remove it.",
             severity: "error"
           };
         case "BUNDLE_MISSING_AGGREGATE_OUTPUT":
