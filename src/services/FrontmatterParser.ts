@@ -471,10 +471,18 @@ export class FrontmatterParser {
     for (const key of OPTION_KEYS) {
       const value = prefixed[key] ?? nested[key] ?? unprefixed[key];
       if (value !== undefined) {
-        resolved[key] = value;
+        this.assignOption(resolved, key, value as BookerOptions[typeof key]);
       }
     }
     return resolved;
+  }
+
+  private assignOption<K extends OptionKey>(
+    target: Partial<BookerOptions>,
+    key: K,
+    value: BookerOptions[K]
+  ): void {
+    target[key] = value;
   }
 
   private readBuildPrefixedOptions(frontmatter: BookerBundleFrontmatter): Partial<BuildOptions> {
@@ -628,6 +636,9 @@ export class FrontmatterParser {
     const lines = rawFrontmatter.split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
+      if (line === undefined) {
+        continue;
+      }
       for (const key of keys) {
         const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const match = line.match(new RegExp(`^(\\s*)${escaped}\\s*:`));
