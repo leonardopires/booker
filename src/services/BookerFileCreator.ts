@@ -12,8 +12,8 @@ type OpenFileFunction = (file: FileRef) => void;
 
 const RECIPE_TEMPLATE = `---
 type: booker-recipe
-title: "New Recipe"
-output: "output/NEW_RECIPE.md"
+title: "$FILENAME$"
+output: "output/$FILENAME$.md"
 order:
   - "[[]]"
 options:
@@ -31,11 +31,11 @@ Describe what this recipe generates.
 
 const BUNDLE_TEMPLATE = `---
 type: booker-bundle
-title: "New Bundle"
+title: "$FILENAME$"
 targets:
   - "[[]]"
 aggregate:
-  output: "output/NEW_BUNDLE.md"
+  output: "output/$FILENAME$.md"
 ---
 
 # New Bundle
@@ -110,7 +110,10 @@ export class BookerFileCreator {
       return null;
     }
 
+    const filenameNoExt = filename.endsWith(".md") ? filename.substring(0, filename.length - 3) : filename;
+
     const content = kind === "recipe" ? RECIPE_TEMPLATE : BUNDLE_TEMPLATE;
+    content.replace(/\$FILENAME$/gm, filenameNoExt);
     const created = await this.context.vault.create(path, content);
     this.context.openFile(created);
     return created;
