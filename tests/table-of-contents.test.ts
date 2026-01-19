@@ -75,7 +75,9 @@ describe("Table of contents rendering", () => {
       }
     );
 
-    expect(content).toContain("# Book Title\n\n## Table of Contents\n\n- Book Title\n- Chapter 1");
+    expect(content).toContain(
+      "# Book Title\n\n# Table of Contents\n\n- [[#Book Title]]\n- [[#Chapter 1]]"
+    );
   });
 
   it("uses a custom TOC title when provided", () => {
@@ -102,7 +104,7 @@ describe("Table of contents rendering", () => {
       }
     );
 
-    expect(content).toContain("## Contents");
+    expect(content).toContain("# Contents");
   });
 
   it("suppresses the TOC heading when the title is empty", () => {
@@ -129,7 +131,7 @@ describe("Table of contents rendering", () => {
       }
     );
 
-    expect(content).toContain("# Book Title\n\n- Book Title\n- Chapter 1");
+    expect(content).toContain("# Book Title\n\n- [[#Book Title]]\n- [[#Chapter 1]]");
     expect(content).not.toContain("## ");
   });
 
@@ -157,7 +159,7 @@ describe("Table of contents rendering", () => {
     );
 
     expect(content).toContain(
-      "- Chapter 1\n  - Section 1.1\n  - Section 1.2\n- Chapter 2"
+      "- [[#Chapter 1]]\n  - [[#Section 1.1]]\n  - [[#Section 1.2]]\n- [[#Chapter 2]]"
     );
   });
 
@@ -186,9 +188,37 @@ describe("Table of contents rendering", () => {
       }
     );
 
-    expect(content).toContain("  - Section 1.1");
-    expect(content).not.toContain("- Chapter 1");
-    expect(content).not.toContain("- Deep 1");
+    expect(content).toContain("  - [[#Section 1.1]]");
+    expect(content).not.toContain("- [[#Chapter 1]]");
+    expect(content).not.toContain("- [[#Deep 1]]");
+  });
+
+  it("ignores fenced headings when building the TOC", () => {
+    const compiler = setupCompiler();
+    const { content } = compiler.compileFromChunks(
+      [
+        {
+          content: "# Visible\n```md\n# Hidden\n```\n## After\n",
+          basename: "Chapter",
+          sourcePath: "chapters/one.md"
+        }
+      ],
+      {
+        outputPath: "dist/book.md",
+        order: [],
+        options: {
+          ...DEFAULT_BOOKER_OPTIONS,
+          toc: true,
+          toc_title: "",
+          strip_title: true,
+          heading_offset: 0
+        }
+      }
+    );
+
+    expect(content).toContain("- [[#Visible]]");
+    expect(content).toContain("  - [[#After]]");
+    expect(content).not.toContain("[[#Hidden]]");
   });
 });
 
@@ -205,42 +235,38 @@ describe("Table of contents aggregation scope", () => {
       type: "booker-recipe",
       output: "dist/recipe.md",
       order: ["chapters/One"],
-      options: { heading_offset: 0, strip_title: true }
+      recipe_heading_offset: 0,
+      recipe_strip_title: true
     });
 
     appContext.metadataCache.setFrontmatter("Child.md", {
       type: "booker-bundle",
       targets: ["Recipe"],
-      aggregate: {
-        output: "dist/child.md",
-        options: { heading_offset: 0, strip_title: true }
-      }
+      aggregate_output: "dist/child.md",
+      aggregate_heading_offset: 0,
+      aggregate_strip_title: true
     });
 
     appContext.metadataCache.setFrontmatter("Parent.md", {
       type: "booker-bundle",
       targets: ["Child"],
-      aggregate: {
-        output: "dist/parent.md",
-        options: {
-          toc: true,
-          toc_scope: "tree",
-          toc_title: "",
-          strip_h1: true,
-          strip_title: true,
-          heading_offset: 0
-        }
-      }
+      aggregate_output: "dist/parent.md",
+      aggregate_toc: true,
+      aggregate_toc_scope: "tree",
+      aggregate_toc_title: "",
+      aggregate_strip_h1: true,
+      aggregate_strip_title: true,
+      aggregate_heading_offset: 0
     });
 
     const runner = setupRunner(appContext);
     await runner.buildCurrentFile({ path: "Parent.md", kind: "file" });
 
     const output = await appContext.vault.read({ path: "dist/parent.md", kind: "file" });
-    expect(output).toContain("- Alpha");
+    expect(output).toContain("- [[#Alpha]]");
   });
 
-  it("limits TOC headings to aggregate content when toc_scope is self", async () => {
+  it("limits TOC headings to aggregate content when toc_scope is file", async () => {
     const appContext = new FakeAppContext({
       "Parent.md": "",
       "Child.md": "",
@@ -252,39 +278,91 @@ describe("Table of contents aggregation scope", () => {
       type: "booker-recipe",
       output: "dist/recipe.md",
       order: ["chapters/One"],
-      options: { heading_offset: 0 }
+      recipe_heading_offset: 0
     });
 
     appContext.metadataCache.setFrontmatter("Child.md", {
       type: "booker-bundle",
       targets: ["Recipe"],
-      aggregate: {
-        output: "dist/child.md",
-        options: { heading_offset: 0 }
-      }
+      aggregate_output: "dist/child.md",
+      aggregate_heading_offset: 0
     });
 
     appContext.metadataCache.setFrontmatter("Parent.md", {
       type: "booker-bundle",
       targets: ["Child"],
-      aggregate: {
-        output: "dist/parent.md",
-        options: {
-          toc: true,
-          toc_scope: "self",
-          toc_title: "Contents",
-          strip_title: true,
-          heading_offset: 2
-        }
-      }
+      aggregate_output: "dist/parent.md",
+      aggregate_toc: true,
+      aggregate_toc_scope: "file",
+      aggregate_toc_title: "Contents",
+      aggregate_strip_title: true,
+      aggregate_heading_offset: 2
     });
 
     const runner = setupRunner(appContext);
     await runner.buildCurrentFile({ path: "Parent.md", kind: "file" });
 
     const output = await appContext.vault.read({ path: "dist/parent.md", kind: "file" });
-    expect(output).toContain("## Contents");
-    expect(output).toContain("    - Alpha");
-    expect(output).not.toContain("\n- Alpha");
+    expect(output).toContain("# Contents");
+    expect(output).toContain("    - [[#Alpha]]");
+    expect(output).not.toContain("\n- [[#Alpha]]");
+  });
+});
+
+describe("Table of contents integration", () => {
+  it("renders a TOC with links in recipe outputs", async () => {
+    const appContext = new FakeAppContext({
+      "Recipe.md": "",
+      "chapters/One.md": "# Alpha\nBody."
+    });
+
+    appContext.metadataCache.setFrontmatter("Recipe.md", {
+      type: "booker-recipe",
+      output: "dist/recipe.md",
+      order: ["chapters/One"],
+      recipe_toc: true,
+      recipe_strip_title: true,
+      recipe_heading_offset: 0
+    });
+
+    const runner = setupRunner(appContext);
+    await runner.buildCurrentFile({ path: "Recipe.md", kind: "file" });
+
+    const output = await appContext.vault.read({ path: "dist/recipe.md", kind: "file" });
+    expect(output).toContain("# Table of Contents");
+    expect(output).toContain("- [[#Alpha]]");
+  });
+
+  it("renders a TOC with links in bundle aggregates", async () => {
+    const appContext = new FakeAppContext({
+      "Bundle.md": "",
+      "Recipe.md": "",
+      "chapters/One.md": "# Alpha\nBody."
+    });
+
+    appContext.metadataCache.setFrontmatter("Recipe.md", {
+      type: "booker-recipe",
+      output: "dist/recipe.md",
+      order: ["chapters/One"],
+      recipe_strip_title: true,
+      recipe_heading_offset: 0
+    });
+
+    appContext.metadataCache.setFrontmatter("Bundle.md", {
+      type: "booker-bundle",
+      targets: ["Recipe"],
+      aggregate_output: "dist/bundle.md",
+      aggregate_toc: true,
+      aggregate_toc_title: "Contents",
+      aggregate_strip_title: true,
+      aggregate_heading_offset: 0
+    });
+
+    const runner = setupRunner(appContext);
+    await runner.buildCurrentFile({ path: "Bundle.md", kind: "file" });
+
+    const output = await appContext.vault.read({ path: "dist/bundle.md", kind: "file" });
+    expect(output).toContain("# Contents");
+    expect(output).toContain("- [[#Alpha]]");
   });
 });

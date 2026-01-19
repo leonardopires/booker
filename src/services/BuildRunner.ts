@@ -48,6 +48,8 @@ type BuildOutcome = {
  * Runs Booker generation for recipes and bundles, producing outputs and summaries.
  */
 export class BuildRunner {
+  private readonly rawFrontmatterCache = new Map<string, string | null>();
+
   constructor(
     private readonly context: BuildRunnerContext
   ) {}
@@ -81,6 +83,14 @@ export class BuildRunner {
     }
 
     this.warnIfDeprecated(file.path, frontmatter.type, typeInfo.deprecated, fileLabel, reporter);
+    await this.reportFrontmatterDeprecations(
+      file,
+      frontmatter,
+      typeInfo.normalized,
+      frontmatterResult.rawFrontmatter,
+      fileLabel,
+      reporter
+    );
 
     try {
       if (typeInfo.normalized === "booker-recipe") {
@@ -125,8 +135,6 @@ export class BuildRunner {
     if (typeInfo.normalized !== "booker-bundle") {
       throw new BookerError("INVALID_TYPE", "INVALID_TYPE");
     }
-
-    this.warnIfDeprecated(file.path, frontmatter.type, typeInfo.deprecated, bundleLabel, reporter);
 
     const bundleConfig = this.context.parser.parseBundleConfig(frontmatter as BookerBundleFrontmatter, file);
     const bundleName = getBasename(file.path);
@@ -262,6 +270,14 @@ export class BuildRunner {
     }
 
     this.warnIfDeprecated(resolved.path, targetFrontmatter.type, typeInfo.deprecated, targetLabel, reporter);
+    await this.reportFrontmatterDeprecations(
+      resolved,
+      targetFrontmatter,
+      typeInfo.normalized,
+      frontmatterResult.rawFrontmatter,
+      targetLabel,
+      reporter
+    );
 
     if (typeInfo.normalized === "booker-recipe") {
       try {
@@ -489,6 +505,47 @@ export class BuildRunner {
     console.warn(`Booker: Deprecated type "${String(rawType)}" in ${path}.`);
   }
 
+  private async reportFrontmatterDeprecations(
+    file: FileRef,
+    frontmatter: BookerRecipeFrontmatter | BookerBundleFrontmatter,
+    type: "booker-recipe" | "booker-bundle",
+    rawFrontmatter: string | null,
+    fileLabel: string,
+    reporter: BuildReporter
+  ): Promise<void> {
+    let warnings = this.context.parser.getDeprecationWarnings(frontmatter, type, rawFrontmatter ?? undefined);
+    if (warnings.length === 0) {
+      return;
+    }
+
+    if (!rawFrontmatter) {
+      const raw = await this.getRawFrontmatter(file);
+      if (raw) {
+        warnings = this.context.parser.getDeprecationWarnings(frontmatter, type, raw);
+      }
+    }
+
+    for (const warning of warnings) {
+      const location =
+        warning.location
+          ? ` (line ${warning.location.line}${warning.location.column !== null ? `, col ${warning.location.column}` : ""})`
+          : "";
+      const keys = warning.keys.length > 0 ? ` [${warning.keys.join(", ")}]` : "";
+      reporter.warning(fileLabel, `${warning.category}${location}: ${warning.hint}${keys ? ` ${keys}` : ""}`);
+    }
+  }
+
+  private async getRawFrontmatter(file: FileRef): Promise<string | null> {
+    if (this.rawFrontmatterCache.has(file.path)) {
+      return this.rawFrontmatterCache.get(file.path) ?? null;
+    }
+    const content = await this.context.vault.read(file);
+    const extracted = this.extractFrontmatter(content);
+    const raw = extracted && "content" in extracted ? extracted.content : null;
+    this.rawFrontmatterCache.set(file.path, raw ?? null);
+    return raw ?? null;
+  }
+
   private createCycleError(callStack: string[]): BookerError {
     const cycle = callStack.map((path) => getBasename(path)).join(" → ");
     return new BookerError("CYCLE_DETECTED", cycle);
@@ -616,34 +673,40 @@ export class BuildRunner {
 
   private async getFrontmatterWithDiagnostics(
     file: FileRef
-  ): Promise<{ frontmatter: BookerRecipeFrontmatter | BookerBundleFrontmatter | null; error: YamlErrorInfo | null }> {
+  ): Promise<{
+    frontmatter: BookerRecipeFrontmatter | BookerBundleFrontmatter | null;
+    error: YamlErrorInfo | null;
+    rawFrontmatter: string | null;
+  }> {
     const frontmatter = this.context.parser.getFrontmatter(file) as
       | BookerRecipeFrontmatter
       | BookerBundleFrontmatter
       | null;
     if (frontmatter) {
-      return { frontmatter, error: null };
+      return { frontmatter, error: null, rawFrontmatter: null };
     }
 
     const content = await this.context.vault.read(file);
     const extracted = this.extractFrontmatter(content);
     if (!extracted) {
-      return { frontmatter: null, error: null };
+      return { frontmatter: null, error: null, rawFrontmatter: null };
     }
     if (extracted.error) {
-      return { frontmatter: null, error: extracted.error };
+      return { frontmatter: null, error: extracted.error, rawFrontmatter: null };
     }
 
     try {
       const parsed = parseYaml(extracted.content);
       return {
         frontmatter: (parsed ?? null) as BookerRecipeFrontmatter | BookerBundleFrontmatter | null,
-        error: null
+        error: null,
+        rawFrontmatter: extracted.content
       };
     } catch (error) {
       return {
         frontmatter: null,
-        error: this.formatYamlError(error)
+        error: this.formatYamlError(error),
+        rawFrontmatter: extracted.content
       };
     }
   }

@@ -19,7 +19,7 @@ export type BookerOptions = {
   /**
    * Scope for bundle table of contents aggregation.
    */
-  toc_scope: "self" | "tree";
+  toc_scope: "file" | "tree";
   /**
    * Maximum heading depth to include in the table of contents.
    */
@@ -79,6 +79,26 @@ export type BookerRecipeFrontmatter = {
   title?: string;
   output?: string;
   order?: string[];
+  recipe_strip_frontmatter?: boolean;
+  recipe_strip_h1?: boolean;
+  recipe_strip_title?: boolean;
+  recipe_separator?: string;
+  recipe_heading_offset?: number;
+  recipe_toc?: boolean;
+  recipe_toc_title?: string;
+  recipe_toc_scope?: "file" | "tree" | "self";
+  recipe_toc_depth?: number;
+  recipe_toc_include_h1?: boolean;
+  strip_frontmatter?: boolean;
+  strip_h1?: boolean;
+  strip_title?: boolean;
+  separator?: string;
+  heading_offset?: number;
+  toc?: boolean;
+  toc_title?: string;
+  toc_scope?: "file" | "tree" | "self";
+  toc_depth?: number;
+  toc_include_h1?: boolean;
   options?: Partial<BookerOptions>;
 };
 
@@ -92,6 +112,32 @@ export type BookerBundleFrontmatter = {
   type?: string;
   title?: string;
   targets?: string[];
+  aggregate_title?: string;
+  aggregate_output?: string;
+  aggregate_strip_frontmatter?: boolean;
+  aggregate_strip_h1?: boolean;
+  aggregate_strip_title?: boolean;
+  aggregate_separator?: string;
+  aggregate_heading_offset?: number;
+  aggregate_toc?: boolean;
+  aggregate_toc_title?: string;
+  aggregate_toc_scope?: "file" | "tree" | "self";
+  aggregate_toc_depth?: number;
+  aggregate_toc_include_h1?: boolean;
+  build_stop_on_error?: boolean;
+  build_continue_on_missing?: boolean;
+  build_dry_run?: boolean;
+  build_summary_notice?: boolean;
+  strip_frontmatter?: boolean;
+  strip_h1?: boolean;
+  strip_title?: boolean;
+  separator?: string;
+  heading_offset?: number;
+  toc?: boolean;
+  toc_title?: string;
+  toc_scope?: "file" | "tree" | "self";
+  toc_depth?: number;
+  toc_include_h1?: boolean;
   aggregate?: BuildAggregateFrontmatter;
   build_options?: Partial<BuildOptions>;
 };

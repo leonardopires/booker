@@ -104,7 +104,7 @@ export class Compiler {
    * @param chunks - Ordered list of content chunks.
    * @param config - Recipe configuration used for transforms.
    * @param tocHeadingsOverride - Optional headings list to use for TOC rendering.
-   * @returns Combined Markdown content and extracted headings.
+   * @returns Combined Markdown content and extracted headings (pre-TOC insertion).
    */
   compileFromChunks(
     chunks: ContentChunk[],

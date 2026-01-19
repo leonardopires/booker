@@ -18,10 +18,9 @@ title: "$FILENAME$"
 output: "output/$FILENAME$.md"
 order:
   - "[[]]"
-options:
-  strip_frontmatter: true
-  strip_h1: true
-  heading_offset: 1
+recipe_strip_frontmatter: true
+recipe_strip_h1: true
+recipe_heading_offset: 1
 ---
 
 # New Recipe
@@ -36,8 +35,7 @@ type: booker-bundle
 title: "$FILENAME$"
 targets:
   - "[[]]"
-aggregate:
-  output: "output/$FILENAME$.md"
+aggregate_output: "output/$FILENAME$.md"
 ---
 
 # New Bundle

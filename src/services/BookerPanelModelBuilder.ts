@@ -119,7 +119,8 @@ export class BookerPanelModelBuilder {
       return this.context.parser.resolveOutputPath(recipeFrontmatter.output, sourcePath);
     }
     const bundleFrontmatter = frontmatter as BookerBundleFrontmatter;
-    const aggregateOutput = bundleFrontmatter.aggregate?.output;
+    const aggregateOutput =
+      bundleFrontmatter.aggregate_output ?? bundleFrontmatter.aggregate?.output;
     if (!aggregateOutput) {
       return null;
     }
