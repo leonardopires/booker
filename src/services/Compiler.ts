@@ -5,17 +5,25 @@ import { LinkResolver } from "./LinkResolver";
 import { MarkdownTransform } from "./MarkdownTransform";
 import { VaultIO } from "./VaultIO";
 
+/**
+ * Shared BookerContext shape for Compiler dependencies.
+ */
+export type CompilerContext = {
+  linkResolver: LinkResolver;
+  vaultIO: VaultIO;
+  markdownTransform: MarkdownTransform;
+};
+
 export type ContentChunk = {
   content: string;
   basename: string;
 };
 
+/**
+ * Compiles recipes into combined Markdown output.
+ */
 export class Compiler {
-  constructor(
-    private readonly linkResolver: LinkResolver,
-    private readonly vaultIO: VaultIO,
-    private readonly markdownTransform: MarkdownTransform
-  ) {}
+  constructor(private readonly context: CompilerContext) {}
 
   async compile(config: BookerRecipeConfig, contextPath: string): Promise<CompileResult> {
     const resolvedFiles: FileRef[] = [];
@@ -24,8 +32,8 @@ export class Compiler {
     const normalizedOutput = normalizePath(config.outputPath);
 
     for (const item of config.order) {
-      const linkpath = this.linkResolver.normalizeLinkString(item);
-      const resolved = this.linkResolver.resolveToFile(linkpath, contextPath);
+      const linkpath = this.context.linkResolver.normalizeLinkString(item);
+      const resolved = this.context.linkResolver.resolveToFile(linkpath, contextPath);
       if (!resolved) {
         missingLinks.push(linkpath);
         continue;
@@ -57,8 +65,8 @@ export class Compiler {
     const success = result.resolvedCount > 0;
 
     if (success && !dryRun) {
-      const outputFile = await this.vaultIO.ensureOutputFile(config.outputPath);
-      await this.vaultIO.write(outputFile, result.content);
+      const outputFile = await this.context.vaultIO.ensureOutputFile(config.outputPath);
+      await this.context.vaultIO.write(outputFile, result.content);
     }
 
     return {
@@ -73,7 +81,7 @@ export class Compiler {
 
   compileFromChunks(chunks: ContentChunk[], config: BookerRecipeConfig): string {
     const pieces = chunks.map((chunk) => {
-      let content = this.markdownTransform.apply(chunk.content, config.options);
+      let content = this.context.markdownTransform.apply(chunk.content, config.options);
       if (!config.options.strip_title) {
         content = this.ensureFilenameTitle(content, chunk.basename);
       }
@@ -81,19 +89,19 @@ export class Compiler {
     });
 
     const titlePrefix = config.title ? `# ${config.title}\n\n` : "";
-    const joined = this.markdownTransform.joinChunks(pieces, config.options.separator);
+    const joined = this.context.markdownTransform.joinChunks(pieces, config.options.separator);
     return `${titlePrefix}${joined}`.trimEnd() + "\n";
   }
 
   async writeOutput(path: string, content: string): Promise<void> {
-    const outputFile = await this.vaultIO.ensureOutputFile(path);
-    await this.vaultIO.write(outputFile, content);
+    const outputFile = await this.context.vaultIO.ensureOutputFile(path);
+    await this.context.vaultIO.write(outputFile, content);
   }
 
   private async compileFromFiles(files: FileRef[], config: BookerRecipeConfig): Promise<string> {
     const chunks: ContentChunk[] = [];
     for (const file of files) {
-      const content = await this.vaultIO.read(file);
+      const content = await this.context.vaultIO.read(file);
       chunks.push({ content, basename: getBasename(file.path) });
     }
     return this.compileFromChunks(chunks, config);

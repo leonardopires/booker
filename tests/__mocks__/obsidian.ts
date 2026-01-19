@@ -7,6 +7,12 @@ export class WorkspaceLeaf {
   }
 }
 
+export class Workspace {
+  getLeaf(): WorkspaceLeaf {
+    return new WorkspaceLeaf();
+  }
+}
+
 export class ItemView {
   contentEl: HTMLElement;
 
@@ -32,18 +38,29 @@ export class ItemView {
 }
 
 export class App {
-  constructor(public workspace: unknown = {}) {}
+  vault: unknown;
+  metadataCache: unknown;
+  workspace: unknown;
+
+  constructor(workspace: unknown = {}, vault: unknown = {}, metadataCache: unknown = {}) {
+    this.workspace = workspace;
+    this.vault = vault;
+    this.metadataCache = metadataCache;
+  }
 }
 
 export class Modal {
+  static lastInstance: Modal | null = null;
   contentEl: HTMLElement;
 
   constructor(public app: App) {
     this.contentEl = document.createElement("div");
+    Modal.lastInstance = this;
   }
 
   open(): void {
     this.onOpen();
+    Modal.lastInstance = this;
   }
 
   close(): void {
@@ -59,5 +76,17 @@ export class Modal {
 
 export class Menu {}
 export class Plugin {}
-export class TFile {}
-export class TFolder {}
+export class TFile {
+  constructor(public path = "", public parent: TFolder | null = null) {}
+}
+export class TFolder {
+  constructor(public path = "") {}
+}
+
+export class Notice {
+  static messages: string[] = [];
+
+  constructor(message: string) {
+    Notice.messages.push(message);
+  }
+}

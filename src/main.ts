@@ -1,56 +1,26 @@
 import { Menu, Plugin, TAbstractFile, TFile, TFolder } from "obsidian";
 import { BookerPanelView, VIEW_TYPE_BOOKER_PANEL } from "./adapters/BookerPanelView";
-import { FilenameModal } from "./adapters/FilenameModal";
-import { ObsidianAppContext, createFileRef } from "./adapters/ObsidianAppContext";
+import { createFileRef } from "./adapters/ObsidianAppContext";
+import { BookerContext } from "./app/BookerContext";
 import { BookerFileCreator } from "./services/BookerFileCreator";
 import { BuildRunner } from "./services/BuildRunner";
-import { BookerPanelModelBuilder } from "./services/BookerPanelModelBuilder";
-import { Compiler } from "./services/Compiler";
-import { FrontmatterParser } from "./services/FrontmatterParser";
-import { LinkResolver } from "./services/LinkResolver";
-import { MarkdownTransform } from "./services/MarkdownTransform";
 import { UserMessagePresenter } from "./services/UserMessagePresenter";
-import { VaultIO } from "./services/VaultIO";
 
 export default class BookerPlugin extends Plugin {
   async onload(): Promise<void> {
-    const appContext = new ObsidianAppContext(this.app);
-    const linkResolver = new LinkResolver(appContext.metadataCache);
-    const parser = new FrontmatterParser(appContext.metadataCache);
-    const markdownTransform = new MarkdownTransform();
-    const vaultIO = new VaultIO(appContext.vault);
-    const compiler = new Compiler(linkResolver, vaultIO, markdownTransform);
-    const presenter = new UserMessagePresenter(appContext.notice);
-    const buildRunner = new BuildRunner(compiler, parser, linkResolver, presenter);
-    const fileCreator = new BookerFileCreator(
-      appContext.vault,
-      presenter,
-      (message, defaultValue) => new FilenameModal(this.app, message, defaultValue).openAndGetValue(),
-      (file) => this.openFile(file.path)
-    );
-    const panelModelBuilder = new BookerPanelModelBuilder(
-      appContext.vault,
-      appContext.metadataCache,
-      parser,
-      linkResolver
-    );
-    const openOutput = (path: string): boolean => {
-      const resolved = this.app.vault.getAbstractFileByPath(path);
-      if (resolved instanceof TFile) {
-        void this.app.workspace.getLeaf(false).openFile(resolved);
-        return true;
-      }
-      return false;
-    };
+    const context = new BookerContext(this.app);
+    const presenter = context.presenter;
+    const buildRunner = context.buildRunner;
+    const fileCreator = context.fileCreator;
 
     this.registerView(
       VIEW_TYPE_BOOKER_PANEL,
       (leaf) =>
         new BookerPanelView(
           leaf,
-          panelModelBuilder,
+          context.panelModelBuilder,
           (file) => buildRunner.buildCurrentFile(file),
-          openOutput,
+          (path) => context.openOutput(path),
           presenter
         )
     );
@@ -143,13 +113,6 @@ export default class BookerPlugin extends Plugin {
     }
     const root = this.app.vault.getRoot();
     return { path: root.path, kind: "folder" };
-  }
-
-  private openFile(path: string): void {
-    const resolved = this.app.vault.getAbstractFileByPath(path);
-    if (resolved instanceof TFile) {
-      void this.app.workspace.getLeaf(false).openFile(resolved);
-    }
   }
 
   /**

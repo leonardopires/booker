@@ -21,7 +21,12 @@ const createSpy = () => {
 const setupView = (appContext: FakeAppContext) => {
   const parser = new FrontmatterParser(appContext.metadataCache);
   const resolver = new LinkResolver(appContext.metadataCache);
-  const builder = new BookerPanelModelBuilder(appContext.vault, appContext.metadataCache, parser, resolver);
+  const builder = new BookerPanelModelBuilder({
+    vault: appContext.vault,
+    metadataCache: appContext.metadataCache,
+    parser,
+    linkResolver: resolver
+  });
   const generateSpy = createSpy();
   const openOutputSpy = createSpy();
   let openOutputResult = true;
