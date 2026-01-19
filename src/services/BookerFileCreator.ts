@@ -20,7 +20,7 @@ order:
   - "[[]]"
 options:
   strip_frontmatter: true
-  strip_h1: false
+  strip_h1: true
   heading_offset: 1
 ---
 
