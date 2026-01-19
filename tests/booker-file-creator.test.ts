@@ -18,7 +18,12 @@ const createCreator = (promptValue: string | null) => {
   const notice = new FakeNotice();
   const presenter = new UserMessagePresenter(notice);
   const prompt = async () => promptValue;
-  const creator = new BookerFileCreator(vault, presenter, prompt, openFileSpy.spy);
+  const creator = new BookerFileCreator({
+    vault,
+    presenter,
+    prompt,
+    openFile: openFileSpy.spy
+  });
   return { creator, vault, openFileSpy, notice };
 };
 

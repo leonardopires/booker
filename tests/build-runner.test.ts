@@ -13,9 +13,9 @@ const setupServices = (appContext: FakeAppContext) => {
   const parser = new FrontmatterParser(appContext.metadataCache);
   const markdownTransform = new MarkdownTransform();
   const vaultIO = new VaultIO(appContext.vault);
-  const compiler = new Compiler(linkResolver, vaultIO, markdownTransform);
+  const compiler = new Compiler({ linkResolver, vaultIO, markdownTransform });
   const presenter = new UserMessagePresenter(appContext.notice);
-  const runner = new BuildRunner(compiler, parser, linkResolver, presenter);
+  const runner = new BuildRunner({ compiler, parser, linkResolver, presenter });
   return { runner };
 };
 
@@ -41,19 +41,31 @@ describe("BuildRunner", () => {
     expect(output).toBe("# Book Title\n\n# One\nIntro.\n\n---\n\n# Two\nSecond.\n");
   });
 
-  it("builds a bundle with inline targets and aggregate output", async () => {
+  it("builds a bundle with targets and aggregate output", async () => {
     const appContext = new FakeAppContext({
       "Bundle.md": "",
+      "RecipeOne.md": "",
+      "RecipeTwo.md": "",
       "chapters/One.md": "# One\nOne content.",
       "chapters/Two.md": "Two content."
     });
 
+    appContext.metadataCache.setFrontmatter("RecipeOne.md", {
+      type: "booker-recipe",
+      output: "dist/one.md",
+      order: ["chapters/One"]
+    });
+
+    appContext.metadataCache.setFrontmatter("RecipeTwo.md", {
+      type: "booker-recipe",
+      output: "dist/two.md",
+      order: ["chapters/Two"],
+      options: { strip_title: true }
+    });
+
     appContext.metadataCache.setFrontmatter("Bundle.md", {
       type: "booker-bundle",
-      targets: [
-        { name: "First", output: "dist/one.md", order: ["chapters/One"] },
-        { name: "Second", output: "dist/two.md", order: ["chapters/Two"], options: { strip_title: true } }
-      ],
+      targets: ["RecipeOne", "RecipeTwo"],
       aggregate: {
         title: "All",
         output: "dist/all.md"
@@ -78,12 +90,19 @@ describe("BuildRunner", () => {
     const appContext = new FakeAppContext({
       "Trilogia.md": "",
       "Livro.md": "",
+      "Recipe.md": "",
       "chapters/One.md": "# One\nOne content."
+    });
+
+    appContext.metadataCache.setFrontmatter("Recipe.md", {
+      type: "booker-recipe",
+      output: "dist/livro.md",
+      order: ["chapters/One"]
     });
 
     appContext.metadataCache.setFrontmatter("Livro.md", {
       type: "booker-bundle",
-      targets: [{ name: "Part", output: "dist/livro.md", order: ["chapters/One"] }],
+      targets: ["Recipe"],
       aggregate: {
         title: "Livro",
         output: "dist/livro-final.md"
@@ -92,7 +111,7 @@ describe("BuildRunner", () => {
 
     appContext.metadataCache.setFrontmatter("Trilogia.md", {
       type: "booker-bundle",
-      targets: [{ name: "Livro", source: "Livro", mode: "bundle" }],
+      targets: ["Livro"],
       aggregate: {
         title: "Trilogia",
         output: "dist/trilogia.md"
@@ -116,13 +135,13 @@ describe("BuildRunner", () => {
 
     appContext.metadataCache.setFrontmatter("BundleA.md", {
       type: "booker-bundle",
-      targets: [{ name: "B", source: "BundleB", mode: "bundle" }],
+      targets: ["BundleB"],
       aggregate: { output: "dist/a.md" }
     });
 
     appContext.metadataCache.setFrontmatter("BundleB.md", {
       type: "booker-bundle",
-      targets: [{ name: "A", source: "BundleA", mode: "bundle" }],
+      targets: ["BundleA"],
       aggregate: { output: "dist/b.md" }
     });
 
@@ -148,7 +167,7 @@ describe("BuildRunner", () => {
 
     appContext.metadataCache.setFrontmatter("Bundle.md", {
       type: "booker-build",
-      targets: [{ name: "Inline", output: "dist/inline.md", order: ["chapters/One"] }],
+      targets: ["Recipe"],
       aggregate: { output: "dist/all.md" }
     });
 
@@ -174,5 +193,31 @@ describe("BuildRunner", () => {
     await runner.buildCurrentFile({ path: "Recipe.md", kind: "file" });
 
     expect(appContext.notice.messages.join("\n")).toContain("❌ This recipe has no output file.");
+  });
+
+  it("warns and aborts when bundles use deprecated target schemas", async () => {
+    const appContext = new FakeAppContext({
+      "Bundle.md": "",
+      "Recipe.md": "",
+      "chapters/One.md": "# One\nOne content."
+    });
+
+    appContext.metadataCache.setFrontmatter("Recipe.md", {
+      type: "booker-recipe",
+      output: "dist/recipe.md",
+      order: ["chapters/One"]
+    });
+
+    appContext.metadataCache.setFrontmatter("Bundle.md", {
+      type: "booker-bundle",
+      targets: [{ name: "Inline", output: "dist/inline.md", order: ["chapters/One"] }],
+      aggregate: { output: "dist/all.md" }
+    });
+
+    const { runner } = setupServices(appContext);
+    await runner.buildCurrentFile({ path: "Bundle.md", kind: "file" });
+
+    expect(appContext.notice.messages.join("\n")).toContain("⚠️ This bundle uses the deprecated target schema.");
+    await expect(appContext.vault.read({ path: "dist/all.md", kind: "file" })).rejects.toThrow();
   });
 });

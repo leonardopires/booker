@@ -20,25 +20,6 @@ export type BookerRecipeFrontmatter = {
   options?: Partial<BookerOptions>;
 };
 
-export type BundleTargetOverrides = {
-  title?: string;
-  output?: string;
-  order?: string[];
-  options?: Partial<BookerOptions>;
-};
-
-export type BundleTargetFrontmatter = {
-  name?: string;
-  source?: string;
-  mode?: TargetMode;
-  title?: string;
-  output?: string;
-  order?: string[];
-  options?: Partial<BookerOptions>;
-  overrides?: BundleTargetOverrides;
-  project?: string;
-};
-
 export type BuildAggregateFrontmatter = {
   title?: string;
   output?: string;
@@ -48,7 +29,7 @@ export type BuildAggregateFrontmatter = {
 export type BookerBundleFrontmatter = {
   type?: string;
   title?: string;
-  targets?: BundleTargetFrontmatter[];
+  targets?: string[];
   aggregate?: BuildAggregateFrontmatter;
   build_options?: Partial<BuildOptions>;
 };
@@ -60,23 +41,6 @@ export type BookerRecipeConfig = {
   options: BookerOptions;
 };
 
-export type TargetMode = "auto" | "recipe" | "bundle";
-
-export type BundleTargetSourcePlan = {
-  name: string;
-  source: string;
-  mode: TargetMode;
-  overrides?: BundleTargetOverrides;
-  title?: string;
-};
-
-export type BundleTargetInlinePlan = {
-  name: string;
-  inlineConfig: BookerRecipeConfig;
-};
-
-export type BundleTargetPlan = BundleTargetSourcePlan | BundleTargetInlinePlan;
-
 export type AggregateConfig = {
   title?: string;
   outputPath: string;
@@ -84,7 +48,7 @@ export type AggregateConfig = {
 };
 
 export type BookerBundleConfig = {
-  targets: BundleTargetPlan[];
+  targets: string[];
   aggregate?: AggregateConfig;
   buildOptions: BuildOptions;
 };
