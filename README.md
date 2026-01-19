@@ -22,6 +22,7 @@ options:
   strip_h1: false
   strip_title: false
   separator: "\n\n---\n\n"
+  heading_offset: 1
 ---
 ```
 
@@ -43,6 +44,7 @@ aggregate:
     strip_frontmatter: true
     strip_h1: false
     separator: "\n\n"
+    heading_offset: 1
 build_options:
   stop_on_error: true
   continue_on_missing: false
@@ -54,6 +56,10 @@ build_options:
 Bundle targets are an ordered list of wikilinks or paths to `booker-recipe` or `booker-bundle` notes. Aggregation concatenates successful target outputs in order, using the aggregate options.
 
 Inline bundle targets and per-target overrides are deprecated. Update any older bundle YAML to the simple `targets:` list before generating.
+
+### Heading offsets
+
+Use `heading_offset` to shift Markdown headings down by N levels during concatenation. The default is `1`, and `0` disables shifting. Apply it per recipe (`options.heading_offset`) or per bundle aggregate (`aggregate.options.heading_offset`). Headings inside fenced code blocks are ignored.
 
 ## Backward-compatible types
 
