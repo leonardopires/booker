@@ -63,8 +63,9 @@ export class BookerPanelView extends ItemView {
   /**
    * Initialize the panel container when the view opens.
    */
-  onOpen(): void {
+  onOpen(): Promise<void> {
     this.render();
+    return Promise.resolve();
   }
 
   /**
