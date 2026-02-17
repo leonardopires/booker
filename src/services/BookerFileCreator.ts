@@ -153,12 +153,12 @@ export class BookerFileCreator {
   /**
    * Collect and format wikilinks from the target folder based on the template kind.
    */
-  private async collectPrefillTargets(options: {
+  private collectPrefillTargets(options: {
     folder: string;
     kind: BookerTemplateKind;
     includeSubfolders: boolean;
     excludePath: string;
-  }): Promise<string[]> {
+  }): string[] {
     const folderRef: FileRef = { path: options.folder, kind: "folder" };
     const candidates = this.context.vault.listFolderFiles(folderRef, options.includeSubfolders);
     const normalizedExclude = normalizePath(options.excludePath);

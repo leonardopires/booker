@@ -29,7 +29,7 @@ export default class BookerPlugin extends Plugin {
   /**
    * Initialize Booker services, views, and commands on plugin load.
    */
-  async onload(): Promise<void> {
+  onload(): void {
     const context = new BookerContext(this.app);
     const presenter = context.presenter;
     const buildRunner = context.buildRunner;
@@ -49,14 +49,14 @@ export default class BookerPlugin extends Plugin {
 
     this.addCommand({
       id: "booker-build-current-file",
-      name: "Booker: Generate current file",
+      name: "Generate current note",
       callback: () => {
         void this.buildCurrentFile(buildRunner, presenter);
       }
     });
     this.addCommand({
       id: "booker-toggle-panel",
-      name: "Booker: Toggle panel",
+      name: "Toggle panel",
       callback: () => {
         void this.togglePanel();
       }
@@ -108,8 +108,8 @@ export default class BookerPlugin extends Plugin {
   
     menu.addItem((item) => {
       item.setTitle("Booker");
-  
-      const anyItem = item as unknown as { setSubmenu?: () => Menu; submenu?: Menu };
+
+      const anyItem = item as { setSubmenu?: () => Menu; submenu?: Menu };
       const sub = typeof anyItem.setSubmenu === "function"
         ? anyItem.setSubmenu()
         : (anyItem.submenu ?? null);
@@ -154,7 +154,7 @@ export default class BookerPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_BOOKER_PANEL);
     const [openLeaf] = existing;
     if (openLeaf) {
-      this.app.workspace.revealLeaf(openLeaf);
+      void this.app.workspace.revealLeaf(openLeaf);
       return;
     }
 
@@ -163,7 +163,7 @@ export default class BookerPlugin extends Plugin {
       return;
     }
     await leaf.setViewState({ type: VIEW_TYPE_BOOKER_PANEL, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    void this.app.workspace.revealLeaf(leaf);
     this.refreshPanelViews();
   }
 
